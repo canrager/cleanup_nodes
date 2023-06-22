@@ -118,8 +118,8 @@ def get_patterns(model,
 
 #%% Inpect dataset
 
-prompts_t[0]
-print("".join(model.to_str_tokens(prompts_t[10])))
+# prompts_t[0]
+# print("".join(model.to_str_tokens(prompts_t[10])))
 
 # %% Model inspection
 
@@ -129,9 +129,7 @@ logits, activation_cache = model.run_with_cache(prompts_t[10])
 # print("".join(model.to_str_tokens(prompts_t[10])))
 # print("prediction:", model.to_str_tokens(logits.argmax(dim=-1)[0, -1]))
 
-
-neuron_idx = 0
-layer = 0
+# %% Implement get_neuron_output function, get neuron output for a specific neuron
 
 def get_neuron_output(
     cache: ActivationCache, layer_idx: int, neuron_idx: int
@@ -149,9 +147,10 @@ def get_neuron_output(
     return neuron_out
 
 
-custom_mlp_out = sum(
-    [get_neuron_output(activation_cache, layer, neuron_idx) for neuron_idx in range(model.cfg.d_mlp)]
-)
+# test our get_neuron_output function
+# custom_mlp_out = sum(
+#     [get_neuron_output(activation_cache, layer, neuron_idx) for neuron_idx in range(model.cfg.d_mlp)]
+# )
 
 # torch.isclose(custom_mlp_out, activation_cache["mlp_out", layer], atol= 1e-5).all()
 
@@ -169,12 +168,13 @@ activation_cache.keys()
 
 
 # %% Projection functions
+# %% Node - node projection
 def projection(
     writer_out: Float[Tensor, 'batch pos dmodel'], 
     cleanup_out: Float[Tensor, 'batch pos dmodel']
 ) -> Float[Tensor, 'batch pos']:
     """Compute the projection from the cleanup output vector to the writer output direction"""
-    norm_writer_out = torch.norm(writer_out)
+    norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
     dot_prod = einops.einsum(writer_out, cleanup_out, "batch pos dmodel, batch pos dmodel -> batch pos")
     return dot_prod / norm_writer_out
 
@@ -183,28 +183,15 @@ def cos_similarity(
     cleanup_out: Float[Tensor, 'batch pos dmodel']
 ) -> Float[Tensor, 'batch pos']:
     """Compute the projection from the cleanup output vector to the writer output direction"""
-    norm_writer_out = torch.norm(writer_out)
-    norm_cleaner_out = torch.norm(cleanup_out)
-    dot_prod = einops.einsum(writer_out, cleanup_out, "batch pos dmodel, batch pos dmodel -> batch pos")
-    return dot_prod / (norm_writer_out * norm_cleaner_out)
+    norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
+    norm_cleaner_out = torch.norm(cleanup_out, dim=-1, keepdim=True)
+    dot_prod = einops.einsum(
+        writer_out / norm_writer_out, 
+        cleanup_out / norm_cleaner_out, 
+        "batch pos dmodel, batch pos dmodel -> batch pos"
+    )
+    return dot_prod
 
-#%% test projection functions
-
-test_batch = 10
-test_pos = 50
-test_dmodel = 512
-
-test_writer_out = torch.rand(size=(test_batch, test_pos, test_dmodel))
-test_resid_pre = torch.rand(size=(test_batch, test_pos, test_dmodel))
-
-test_resid_mid = test_resid_pre + test_writer_out
-
-print(projection(writer_out=test_writer_out, cleanup_out=test_resid_mid))
-print(projection(writer_out=test_writer_out[0,0], cleanup_out=test_resid_mid[0,0]))
-
-
-
-#%%
 # prompt 0, 10th position
 ## all attentions
 # attn_hook_names = [name for name in activation_cache.keys() if "result" in name]
@@ -262,7 +249,7 @@ def calc_node_node_projection(
     return projection_matrix
 # %%
 
-node_node_projections = calc_node_node_projection(prompts_t[:10], proj_func=projection)
+# node_node_projections = calc_node_node_projection(prompts_t[:10], proj_func=projection)
 # %%
 
 def calc_node_resid_projection(
@@ -317,7 +304,7 @@ all_resids = [
 
 
 px.imshow(
-    node_resid_projection_matrix.flatten(start_dim=-2).min(dim=-1).values,
+    node_resid_projection_matrix.flatten(start_dim=-2).mean(dim=-1),
     color_continuous_midpoint=0,
     color_continuous_scale='RdBu',
     y=[f"Head {layer}.{head}" for layer, head in all_heads],
