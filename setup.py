@@ -1,30 +1,26 @@
-# %%
+# %% Import modules
 import torch
 import einops
 torch.set_grad_enabled(False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 from transformer_lens import HookedTransformer, ActivationCache
-from pathlib import Path
-import pickle
 import plotly.express as px
 from tqdm.notebook import trange, tqdm
-from functools import partial
-import pandas as pd
-import re
-import unicodedata
-from functools import partial
-import random
+from datasets import load_dataset
 
 from torch import Tensor
 from jaxtyping import Float, Int, Bool
-from typing import List, Optional, Callable, Tuple, Dict, Literal, Set
+from typing import List, Callable
+from plotting import get_fig_head_mlp_neuron
 
-model = HookedTransformer.from_pretrained('gelu-3l')
+
+#%% Setup model
+model = HookedTransformer.from_pretrained('gelu-4l')
 model.cfg.use_attn_result = True
 
-# %%
-from datasets import load_dataset
+# %% Setup dataset
+
 
 def get_prompts_list(dataset_name: str, n_prompts: int, shuffle_buffer_size: int, shuffle_seed: int):
     print(f"Loading {n_prompts} prompts from {dataset_name}...")
@@ -253,7 +249,34 @@ def calc_node_node_projection(
     return projection_matrix
 # %%
 
-# node_node_projections = calc_node_node_projection(prompts_t[:10], proj_func=projection)
+node_node_projections = calc_node_node_projection(prompts_t, proj_func=projection)
+
+#%%
+get_fig_head_mlp_neuron(
+    projections=node_node_projections,
+    quantile=0.1,
+    k=50,
+    n_heads=model.cfg.n_heads,
+    d_mlp=model.cfg.d_mlp
+).show()
+
+
+
+
+
+#%%
+
+def plot_projection_node_node(node_node_projection_matrix: Float[Tensor, "head neuron prompt pos"], proj_func: Callable):
+    px.imshow(
+        node_node_projection_matrix.flatten(start_dim=-2).mean(dim=-1), # TODO percentile later
+        color_continuous_midpoint=0,
+        color_continuous_scale='RdBu',
+        y=[f"Head {layer}.{head}" for layer, head in all_heads],
+        x=[f"Resid {layer}.{resid.split('_')[-1]}" for layer, resid in all_resids],
+        title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
+    ).show()
+
+plot_projection_node_node(node_node_projections, projection)
 # %%
 
 def calc_node_resid_projection(
