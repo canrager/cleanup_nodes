@@ -121,7 +121,6 @@ def get_patterns(model,
 prompts_t[0]
 print("".join(model.to_str_tokens(prompts_t[10])))
 
-
 # %% Model inspection
 
 logits, activation_cache = model.run_with_cache(prompts_t[10])
@@ -167,7 +166,9 @@ logits, activation_cache = model.run_with_cache(
 
 # %%
 activation_cache.keys()
-# %% Node - node projection
+
+
+# %% Projection functions
 def projection(
     writer_out: Float[Tensor, 'batch pos dmodel'], 
     cleanup_out: Float[Tensor, 'batch pos dmodel']
@@ -187,6 +188,23 @@ def cos_similarity(
     dot_prod = einops.einsum(writer_out, cleanup_out, "batch pos dmodel, batch pos dmodel -> batch pos")
     return dot_prod / (norm_writer_out * norm_cleaner_out)
 
+#%% test projection functions
+
+test_batch = 10
+test_pos = 50
+test_dmodel = 512
+
+test_writer_out = torch.rand(size=(test_batch, test_pos, test_dmodel))
+test_resid_pre = torch.rand(size=(test_batch, test_pos, test_dmodel))
+
+test_resid_mid = test_resid_pre + test_writer_out
+
+print(projection(writer_out=test_writer_out, cleanup_out=test_resid_mid))
+print(projection(writer_out=test_writer_out[0,0], cleanup_out=test_resid_mid[0,0]))
+
+
+
+#%%
 # prompt 0, 10th position
 ## all attentions
 # attn_hook_names = [name for name in activation_cache.keys() if "result" in name]
@@ -306,4 +324,5 @@ px.imshow(
     x=[f"Resid {layer}.{resid}" for layer, resid in all_resids],
     title="Node - Resid Projection"
 )
-# %%
+
+
