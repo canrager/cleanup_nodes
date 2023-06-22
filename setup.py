@@ -12,7 +12,7 @@ from datasets import load_dataset
 from torch import Tensor
 from jaxtyping import Float, Int, Bool
 from typing import List, Callable
-from plotting import get_fig_head_mlp_neuron
+from plotting import get_fig_head_to_mlp_neuron
 
 
 #%% Setup model
@@ -252,7 +252,7 @@ def calc_node_node_projection(
 node_node_projections = calc_node_node_projection(prompts_t, proj_func=projection)
 
 #%%
-get_fig_head_mlp_neuron(
+get_fig_head_to_mlp_neuron(
     projections=node_node_projections,
     quantile=0.1,
     k=50,
