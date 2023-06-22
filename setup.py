@@ -15,6 +15,7 @@ import re
 import unicodedata
 from functools import partial
 import random
+from plotting import get_fig_head_mlp_neuron
 
 from torch import Tensor
 from jaxtyping import Float, Int, Bool
@@ -253,7 +254,7 @@ def calc_node_node_projection(
     return projection_matrix
 # %%
 
-# node_node_projections = calc_node_node_projection(prompts_t[:10], proj_func=projection)
+node_node_projections = calc_node_node_projection(prompts_t, proj_func=projection)
 # %%
 
 def calc_node_resid_projection(
