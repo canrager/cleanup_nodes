@@ -1,5 +1,6 @@
 # %%
 import torch
+import einops
 torch.set_grad_enabled(False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -15,7 +16,13 @@ import unicodedata
 from functools import partial
 import random
 
+from torch import Tensor
+from jaxtyping import Float, Int, Bool
+from typing import List, Optional, Callable, Tuple, Dict, Literal, Set
+
 model = HookedTransformer.from_pretrained('gelu-3l')
+model.cfg.use_attn_result = True
+
 # %%
 from datasets import load_dataset
 
@@ -29,19 +36,20 @@ def get_prompts_list(dataset_name: str, n_prompts: int, shuffle_buffer_size: int
             return pickle.load(f)
     print("Downloading from HuggingFace...")
     prompts_list = []
-    ds_unsfuffled = load_dataset(f"NeelNanda/{dataset_name}", streaming=True, split="train")
-    ds = ds_unsfuffled.shuffle(buffer_size=shuffle_buffer_size, seed=shuffle_seed)
+    ds_unshuffled = load_dataset(f"NeelNanda/{dataset_name}", streaming=True, split="train")
+    ds = ds_unshuffled.shuffle(buffer_size=shuffle_buffer_size, seed=shuffle_seed)
     ds_iter = iter(ds)
     for _ in trange(n_prompts):
         prompts_list.append(next(ds_iter)["tokens"])
     with open(file_path, "wb") as f:
         pickle.dump(prompts_list, f)
     return prompts_list
-# %%
+
+# %% Dataset preprocessing
 N_TOTAL_PROMPTS = 100
 N_C4_TOTAL_PROMPTS = int(0.8 * N_TOTAL_PROMPTS)
 N_CODE_TOTAL_PROMPTS = N_TOTAL_PROMPTS - N_C4_TOTAL_PROMPTS
-DS_SHUFFLE_SEED, DS_SHUFFLE_BUFFER_SIZE = 5235, N_TOTAL_PROMPTS // 10
+DS_SHUFFLE_SEED, DS_SHUFFLE_BUFFER_SIZE = 5235, N_TOTAL_PROMPTS // 10 # Ds_shuffle_biffersize determines subset of ds, where prompts are ramdomly sampled from
 
 def shuffle_tensor(tensor, dim):
     torch.manual_seed(DS_SHUFFLE_SEED)
@@ -57,7 +65,7 @@ def get_prompts_t():
     )
     return shuffle_tensor(prompts_t, dim=0)
 
-def get_token_counts(prompts_t_):
+def get_token_counts(prompts_t_): # returns list of #occurences per token
     unique_tokens, tokens_counts_ = torch.unique(prompts_t_, return_counts=True)
     tokens_counts = torch.zeros(model.cfg.d_vocab, dtype=torch.int64, device=device)
     tokens_counts[unique_tokens] = tokens_counts_.to(device)
@@ -66,12 +74,15 @@ def get_token_counts(prompts_t_):
 prompts_t = get_prompts_t()
 token_counts = get_token_counts(prompts_t)
 
+# filter out tokens that occur less than 0.1% than the total number of prompts
 MIN_TOKEN_COUNT = N_TOTAL_PROMPTS // 1_000
 tokens = torch.arange(model.cfg.d_vocab, device=device, dtype=torch.int32)
 tokens = tokens[token_counts >= MIN_TOKEN_COUNT]
 tokens_set = set(tokens.tolist())
 prompts_t[0, 1]
+
 # %%
+# is outdated as we can run_with_cache and apply filter
 def get_raw_patterns(model, prompts, layer: int, head: int):
     patterns = None
     def hook_get_pattern(act, hook):
@@ -103,3 +114,101 @@ def get_patterns(model,
         # Get attn patterns of a specific head, ignoring first ignore_first_n_pos dst pos or rows
         raw_patterns_mb = get_raw_patterns(model, prompts_mb, layer, head)
         # TODO: ...
+
+
+#%% Inpect dataset
+
+prompts_t[0]
+print("".join(model.to_str_tokens(prompts_t[10])))
+
+
+# %% Model inspection
+
+logits, activation_cache = model.run_with_cache(prompts_t[10])
+print(logits.shape)
+
+print("".join(model.to_str_tokens(prompts_t[10])))
+print("prediction:", model.to_str_tokens(logits.argmax(dim=-1)[0, -1]))
+
+# %% Get pattern with transformerlens
+def get_node_outputs_and_resid(name: str) -> bool:
+    hook_names = ["result", "mlp_out", "resid_mid", "resid_post"]
+    return any(hook_name in name for hook_name in hook_names)
+
+logits, activation_cache = model.run_with_cache(
+    prompts_t[:10],
+    names_filter= get_node_outputs_and_resid)
+
+# %%
+activation_cache.keys()
+# %% Node - node projection
+def projection(
+    writer_out: Float[Tensor, 'batch pos dmodel'], 
+    cleanup_out: Float[Tensor, 'batch pos dmodel']
+) -> Float[Tensor, 'batch pos']:
+    """Compute the projection from the cleanup output vector to the writer output direction"""
+    norm_writer_out = torch.norm(writer_out)
+    dot_prod = einops.einsum(writer_out, cleanup_out, "batch pos dmodel, batch pos dmodel -> batch pos")
+    return dot_prod / norm_writer_out
+
+# prompt 0, 10th position
+## all attentions
+attn_hook_names = [name for name in activation_cache.keys() if "result" in name]
+attn_activations = [activation_cache[name] for name in attn_hook_names]
+attn_activations = einops.rearrange(attn_activations, "layer batch pos head dmodel -> batch pos (layer head) dmodel")
+
+mlp_hook_names = [name for name in activation_cache.keys() if "mlp_out" in name]
+mlp_activations = [activation_cache[name] for name in mlp_hook_names]
+mlp_activations = einops.rearrange(mlp_activations, "layer batch pos head dmodel -> batch pos (layer head) dmodel")
+
+
+# for attn_layer
+
+# batch, pos, writer, cleaner
+
+
+# %%
+
+def calc_node_node_projection(
+    tokens: List[int]
+) -> Float[Tensor, "head neuron prompt pos"]:
+    all_heads = [
+        (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.n_heads)
+    ]
+
+    all_neurons = [
+        (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.d_mlp)
+    ]
+
+    n_total_heads = len(all_heads)
+    n_total_neurons = len(all_neurons)
+    n_prompts = len(tokens)
+    n_pos = len(tokens[0])
+    
+    projection_matrix = torch.zeros(
+        n_total_heads,
+        n_total_neurons,
+        n_prompts,
+        n_pos,
+    )
+
+    for pi in trange(0, len(tokens), 10):
+        _, cache = model.run_with_cache(
+            tokens[pi : pi + 10], names_filter=get_node_outputs_and_resid
+        )
+
+        for w, (lw, hw) in enumerate(all_heads):
+            for c, (lc, hc) in enumerate(all_neurons):
+                writer_out = cache['result', lw][:, :, hw, :]
+                cleaner_out = cache['mlp_out', lc][:, :, hc, :]
+                projection_matrix[w, c, pi:pi+10, :] = projection(
+                    writer_out, cleaner_out
+                )
+
+    return projection_matrix
+# %%
+
+calc_node_node_projection(prompts_t)
+
+
+# %%
