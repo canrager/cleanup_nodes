@@ -175,8 +175,12 @@ def projection(
 ) -> Float[Tensor, 'batch pos']:
     """Compute the projection from the cleanup output vector to the writer output direction"""
     norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
-    dot_prod = einops.einsum(writer_out, cleanup_out, "batch pos dmodel, batch pos dmodel -> batch pos")
-    return dot_prod / norm_writer_out
+    dot_prod = einops.einsum(
+        writer_out / norm_writer_out, 
+        cleanup_out, 
+        "batch pos dmodel, batch pos dmodel -> batch pos"
+    )
+    return dot_prod 
 
 def cos_similarity(
     writer_out: Float[Tensor, 'batch pos dmodel'], 
@@ -292,7 +296,6 @@ def calc_node_resid_projection(
     return projection_matrix
 
 # %%
-node_resid_projection_matrix = calc_node_resid_projection(prompts_t, cos_similarity)
 
 all_heads = [
     (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.n_heads)
@@ -302,14 +305,20 @@ all_resids = [
     (l, act) for l in range(model.cfg.n_layers) for act in ['resid_mid', 'resid_post']
 ] # [resid_mid0, resid_post0, resid_mid1, ... ,resid_post2]
 
+def plot_projection(proj_func: Callable):
+    node_resid_projection_matrix = calc_node_resid_projection(prompts_t, proj_func)
+    px.imshow(
+        node_resid_projection_matrix.flatten(start_dim=-2).mean(dim=-1),
+        color_continuous_midpoint=0,
+        color_continuous_scale='RdBu',
+        y=[f"Head {layer}.{head}" for layer, head in all_heads],
+        x=[f"Resid {layer}.{resid.split('_')[-1]}" for layer, resid in all_resids],
+        title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
+    ).show()
 
-px.imshow(
-    node_resid_projection_matrix.flatten(start_dim=-2).mean(dim=-1),
-    color_continuous_midpoint=0,
-    color_continuous_scale='RdBu',
-    y=[f"Head {layer}.{head}" for layer, head in all_heads],
-    x=[f"Resid {layer}.{resid}" for layer, resid in all_resids],
-    title="Node - Resid Projection"
-)
+plot_projection(projection)
+plot_projection(cos_similarity)
 
 
+
+# %%
