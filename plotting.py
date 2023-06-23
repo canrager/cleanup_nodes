@@ -191,6 +191,7 @@ def get_fig_head_to_mlp_neuron_by_layer(
 def get_fig_head_to_selected_mlp_neuron(
     projections: Float[t.Tensor, "head neuron prompt pos"],
     k: int,
+    quantile: float,
     neuron_names: Tuple[int, int],
     n_layers: int,
 ) -> go.Figure:
