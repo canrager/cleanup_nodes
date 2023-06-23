@@ -5,7 +5,10 @@ torch.set_grad_enabled(False)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 from transformer_lens import HookedTransformer, ActivationCache
+from transformer_lens.utils import get_act_name
 import plotly.express as px
+import pandas as pd
+import numpy as np
 from tqdm.notebook import trange, tqdm
 from datasets import load_dataset
 
@@ -14,14 +17,11 @@ from jaxtyping import Float, Int, Bool
 from typing import List, Callable
 from plotting import get_fig_head_to_mlp_neuron
 
-
 #%% Setup model
 model = HookedTransformer.from_pretrained('gelu-4l')
 model.cfg.use_attn_result = True
 
 # %% Setup dataset
-
-
 def get_prompts_list(dataset_name: str, n_prompts: int, shuffle_buffer_size: int, shuffle_seed: int):
     print(f"Loading {n_prompts} prompts from {dataset_name}...")
     # file_name = f"{dataset_name}-{n_prompts}-seed{shuffle_seed}-buffer{shuffle_buffer_size}.pkl"
@@ -77,40 +77,6 @@ tokens = tokens[token_counts >= MIN_TOKEN_COUNT]
 tokens_set = set(tokens.tolist())
 prompts_t[0, 1]
 
-# %%
-# is outdated as we can run_with_cache and apply filter
-def get_raw_patterns(model, prompts, layer: int, head: int):
-    patterns = None
-    def hook_get_pattern(act, hook):
-        # batch, dst, src
-        nonlocal patterns
-        patterns = act[:, head]
-
-    model.reset_hooks()
-    model.add_hook(f"blocks.{layer}.attn.hook_pattern", hook_get_pattern)
-    model(prompts, stop_at_layer=layer+1)
-    model.reset_hooks()
-
-    return patterns
-
-
-def get_patterns(model, 
-                prompts, # n_examples, n_ctx
-                layer: int, 
-                head: int, 
-                mb_size: int):
-
-    # Store attention patterns as a list of dicts
-    patterns = []
-    
-    # Enumerate over each batch of prompts
-    for prompts_mb_idx in trange(0, prompts.shape[0], mb_size):
-        prompts_mb = prompts[prompts_mb_idx:prompts_mb_idx+mb_size]
-
-        # Get attn patterns of a specific head, ignoring first ignore_first_n_pos dst pos or rows
-        raw_patterns_mb = get_raw_patterns(model, prompts_mb, layer, head)
-        # TODO: ...
-
 
 #%% Inpect dataset
 
@@ -119,7 +85,7 @@ def get_patterns(model,
 
 # %% Model inspection
 
-logits, activation_cache = model.run_with_cache(prompts_t[10])
+# logits, activation_cache = model.run_with_cache(prompts_t[10])
 # print(logits.shape)
 
 # print("".join(model.to_str_tokens(prompts_t[10])))
@@ -150,7 +116,7 @@ def get_neuron_output(
 
 # torch.isclose(custom_mlp_out, activation_cache["mlp_out", layer], atol= 1e-5).all()
 
-# %% Get pattern with transformerlens
+# %% Get activation cache with transformerlens
 def get_node_outputs_and_resid(name: str) -> bool:
     hook_names = ["result", "post", "resid_mid", "resid_post"]
     return any(hook_name in name for hook_name in hook_names)
@@ -159,12 +125,9 @@ logits, activation_cache = model.run_with_cache(
     prompts_t[:10],
     names_filter= get_node_outputs_and_resid)
 
-# %%
 activation_cache.keys()
 
-
 # %% Projection functions
-# %% Node - node projection
 def projection(
     writer_out: Float[Tensor, 'batch pos dmodel'], 
     cleanup_out: Float[Tensor, 'batch pos dmodel']
@@ -192,23 +155,7 @@ def cos_similarity(
     )
     return dot_prod
 
-# prompt 0, 10th position
-## all attentions
-# attn_hook_names = [name for name in activation_cache.keys() if "result" in name]
-# attn_activations = [activation_cache[name] for name in attn_hook_names]
-# attn_activations = einops.rearrange(attn_activations, "layer batch pos head dmodel -> batch pos (layer head) dmodel")
-
-# mlp_hook_names = [name for name in activation_cache.keys() if "mlp_out" in name]
-# mlp_activations = [activation_cache[name] for name in mlp_hook_names]
-# mlp_activations = einops.rearrange(mlp_activations, "layer batch pos head dmodel -> batch pos (layer head) dmodel")
-
-
-# for attn_layer
-
-# batch, pos, writer, cleaner
-
-
-# %%
+# %% Node - Node Projections
 def calc_node_node_projection(
     tokens: List[int],
     proj_func: Callable,
@@ -247,11 +194,10 @@ def calc_node_node_projection(
                 )
 
     return projection_matrix
-# %%
-
+# %% Calculate node-node projections data
 node_node_projections = calc_node_node_projection(prompts_t, proj_func=projection)
 
-#%%
+#%% Plot node-node projections
 get_fig_head_to_mlp_neuron(
     projections=node_node_projections,
     quantile=0.1,
@@ -260,23 +206,80 @@ get_fig_head_to_mlp_neuron(
     d_mlp=model.cfg.d_mlp
 ).show()
 
+#%% Single Head -> Single Neuron: Projecion Distribution
+
+def single_head_neuron_projection(
+    prompts, 
+    writer_layer: int, 
+    writer_idx: int, 
+    cleaner_layer: int, 
+    cleaner_idx: int,
+    return_fig: bool = False
+) -> Float[Tensor, "projection_values"]:
+
+    # Get act names
+    writer_hook_name = get_act_name("result", writer_layer)
+    cleaner_hook_name = get_act_name("post", cleaner_layer)
+
+    # Run with cache on all prompts (at once?)
+    _, cache = model.run_with_cache(
+        prompts,
+        names_filter=lambda name: name in [writer_hook_name, cleaner_hook_name]
+        )
+
+    # Get ouput per neuron from mlp_post
+    full_neuron_output = get_neuron_output(cache, cleaner_layer, cleaner_idx)
+
+    # Select specific idx
+    # calc projections vectorized (is the projection function valid for this vectorized operation?)
+    projections = projection(
+        writer_out=cache[writer_hook_name][:, :, writer_idx, :],
+        cleanup_out=full_neuron_output
+    )
+
+    if return_fig:
+        proj_np = projections.flatten().cpu().numpy()
+        seqpos_labels = einops.repeat(np.arange(model.cfg.n_ctx), "pos -> (pos n_prompts)", n_prompts=len(prompts))
+        fig = px.histogram(
+            proj_np,
+            nbins=20,
+            title=f"Projection of neuron {cleaner_layer}.{cleaner_idx} onto direction of head {writer_layer}.{writer_idx}\nfor {len(prompts) * model.cfg.n_ctx} seq positions",
+            animation_frame=seqpos_labels,
+            range_x=[proj_np.min(), proj_np.max()]
+        )
+
+        return projections, fig
+    else:
+        return projections
+
+
+# %% Single Head-Neuron inspection
+hn_proj, fig = single_head_neuron_projection(
+    prompts_t[:20],
+    writer_layer=1,
+    writer_idx=6,
+    cleaner_layer=2,
+    cleaner_idx=1182,
+    return_fig=True
+)
+
+fig.show()
 
 
 
 
 #%%
+# def plot_projection_node_node(node_node_projection_matrix: Float[Tensor, "head neuron prompt pos"], proj_func: Callable):
+#     px.imshow(
+#         node_node_projection_matrix.flatten(start_dim=-2).mean(dim=-1), # TODO percentile later
+#         color_continuous_midpoint=0,
+#         color_continuous_scale='RdBu',
+#         y=[f"Head {layer}.{head}" for layer, head in all_heads],
+#         x=[f"Resid {layer}.{resid.split('_')[-1]}" for layer, resid in all_resids],
+#         title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
+#     ).show()
 
-def plot_projection_node_node(node_node_projection_matrix: Float[Tensor, "head neuron prompt pos"], proj_func: Callable):
-    px.imshow(
-        node_node_projection_matrix.flatten(start_dim=-2).mean(dim=-1), # TODO percentile later
-        color_continuous_midpoint=0,
-        color_continuous_scale='RdBu',
-        y=[f"Head {layer}.{head}" for layer, head in all_heads],
-        x=[f"Resid {layer}.{resid.split('_')[-1]}" for layer, resid in all_resids],
-        title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
-    ).show()
-
-plot_projection_node_node(node_node_projections, projection)
+# plot_projection_node_node(node_node_projections, projection)
 # %%
 
 def calc_node_resid_projection(
