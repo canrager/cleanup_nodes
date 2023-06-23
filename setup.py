@@ -10,84 +10,24 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 from tqdm.notebook import trange, tqdm
-from datasets import load_dataset
 
 from torch import Tensor
 from jaxtyping import Float, Int, Bool
 from typing import List, Callable
 from plotting import get_fig_head_to_mlp_neuron
+from load_data import get_prompts_t
 
-#%% Setup model
+#%% Setup model & load data
 model = HookedTransformer.from_pretrained('gelu-4l')
 model.cfg.use_attn_result = True
-
-# %% Setup dataset
-def get_prompts_list(dataset_name: str, n_prompts: int, shuffle_buffer_size: int, shuffle_seed: int):
-    print(f"Loading {n_prompts} prompts from {dataset_name}...")
-    # file_name = f"{dataset_name}-{n_prompts}-seed{shuffle_seed}-buffer{shuffle_buffer_size}.pkl"
-    # file_path = "./data" / Path(file_name) # Change based on user
-    # if file_path.exists():
-    #     print("Using pickled prompts...")
-    #     with open(file_path, "rb") as f:
-    #         return pickle.load(f)
-    # print("Downloading from HuggingFace...")
-    prompts_list = []
-    ds_unshuffled = load_dataset(f"NeelNanda/{dataset_name}", streaming=True, split="train")
-    ds = ds_unshuffled.shuffle(buffer_size=shuffle_buffer_size, seed=shuffle_seed)
-    ds_iter = iter(ds)
-    for _ in trange(n_prompts):
-        prompts_list.append(next(ds_iter)["tokens"])
-    # with open(file_path, "wb") as f:
-    #     pickle.dump(prompts_list, f)
-    return prompts_list
-
-# %% Dataset preprocessing
-N_TOTAL_PROMPTS = 100
-N_C4_TOTAL_PROMPTS = int(0.8 * N_TOTAL_PROMPTS)
-N_CODE_TOTAL_PROMPTS = N_TOTAL_PROMPTS - N_C4_TOTAL_PROMPTS
-DS_SHUFFLE_SEED, DS_SHUFFLE_BUFFER_SIZE = 5235, N_TOTAL_PROMPTS // 10 # Ds_shuffle_biffersize determines subset of ds, where prompts are ramdomly sampled from
-
-def shuffle_tensor(tensor, dim):
-    torch.manual_seed(DS_SHUFFLE_SEED)
-    torch.cuda.manual_seed(DS_SHUFFLE_SEED)
-    return tensor[torch.randperm(tensor.shape[dim])]
-
-def get_prompts_t():
-    shuffle_kwargs = dict(shuffle_buffer_size=DS_SHUFFLE_BUFFER_SIZE, shuffle_seed=DS_SHUFFLE_SEED)
-    c4_prompts_list = get_prompts_list("c4-tokenized-2b", n_prompts=N_C4_TOTAL_PROMPTS, **shuffle_kwargs)
-    code_prompts_list = get_prompts_list("code-tokenized", n_prompts=N_CODE_TOTAL_PROMPTS, **shuffle_kwargs)
-    prompts_t = torch.tensor(
-        c4_prompts_list + code_prompts_list
-    )
-    return shuffle_tensor(prompts_t, dim=0)
-
-def get_token_counts(prompts_t_): # returns list of #occurences per token
-    unique_tokens, tokens_counts_ = torch.unique(prompts_t_, return_counts=True)
-    tokens_counts = torch.zeros(model.cfg.d_vocab, dtype=torch.int64, device=device)
-    tokens_counts[unique_tokens] = tokens_counts_.to(device)
-    return tokens_counts
+model.to(device)
 
 prompts_t = get_prompts_t()
-token_counts = get_token_counts(prompts_t)
-
-# filter out tokens that occur less than 0.1% than the total number of prompts
-MIN_TOKEN_COUNT = N_TOTAL_PROMPTS // 1_000
-tokens = torch.arange(model.cfg.d_vocab, device=device, dtype=torch.int32)
-tokens = tokens[token_counts >= MIN_TOKEN_COUNT]
-tokens_set = set(tokens.tolist())
-prompts_t[0, 1]
 
 
-#%% Inpect dataset
+#%% Inpection - Dataset & Model
 
-# prompts_t[0]
-# print("".join(model.to_str_tokens(prompts_t[10])))
-
-# %% Model inspection
-
-# logits, activation_cache = model.run_with_cache(prompts_t[10])
-# print(logits.shape)
-
+logits, activation_cache = model.run_with_cache(prompts_t[10])
 # print("".join(model.to_str_tokens(prompts_t[10])))
 # print("prediction:", model.to_str_tokens(logits.argmax(dim=-1)[0, -1]))
 
@@ -100,13 +40,24 @@ def get_neuron_output(
     neuron_wout = model.W_out[layer_idx, neuron_idx]
     mlp_bias = model.b_out[layer_idx] / model.cfg.d_mlp         # TODO design choice, discuss with Jett
 
-    # print(f"{neuron_activation.shape=}")
-    # print(f"{neuron_wout.shape=}")
-    # print(f"{mlp_bias.shape=}")
-
     neuron_out = neuron_activation.unsqueeze(dim=-1) * neuron_wout + mlp_bias
-    # print(neuron_activation.shape)
     return neuron_out
+
+# not using now
+def get_full_layer_neuron_output(
+    cache: ActivationCache, layer_idx: int
+) -> Float[Tensor, "batch pos dmlp dmodel"]:
+    neuron_activation = cache["mlp_post", layer_idx] # batch, pos, dmlp
+    neuron_wout = model.W_out[layer_idx] # dmlp, dmodel
+    mlp_bias = model.b_out[layer_idx] / model.cfg.d_mlp # dmodel
+
+    neuron_out = einops.einsum(
+        neuron_activation, 
+        neuron_wout,
+        "batch pos dmlp, dmlp dmodel -> batch pos dmlp dmodel",
+    )
+    del neuron_activation
+    return neuron_out + mlp_bias
 
 
 # test our get_neuron_output function
@@ -116,16 +67,11 @@ def get_neuron_output(
 
 # torch.isclose(custom_mlp_out, activation_cache["mlp_out", layer], atol= 1e-5).all()
 
-# %% Get activation cache with transformerlens
-def get_node_outputs_and_resid(name: str) -> bool:
+# %% Get pattern with transformerlens
+def act_filter(name: str) -> bool:
     hook_names = ["result", "post", "resid_mid", "resid_post"]
     return any(hook_name in name for hook_name in hook_names)
 
-logits, activation_cache = model.run_with_cache(
-    prompts_t[:10],
-    names_filter= get_node_outputs_and_resid)
-
-activation_cache.keys()
 
 # %% Projection functions
 def projection(
@@ -155,7 +101,69 @@ def cos_similarity(
     )
     return dot_prod
 
-# %% Node - Node Projections
+def projection_full_layer_neurons(
+    writer_out: Float[Tensor, 'batch pos dmodel'], 
+    cleanup_out: Float[Tensor, 'batch pos dmlp dmodel']
+) -> Float[Tensor, 'dmlp batch pos']:
+    """Compute the projection from the cleanup output vector to the writer output direction"""
+    norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
+    dot_prod = einops.einsum(
+        writer_out / norm_writer_out, 
+        cleanup_out, 
+        "batch pos dmodel, batch pos dmlp dmodel -> dmlp batch pos"
+    )
+    del writer_out
+    del cleanup_out
+    return dot_prod 
+
+# %%
+def calc_node_node_projection_full_mlp(
+    tokens: List[int],
+    proj_func: Callable,
+    mb_size: int = 1,
+) -> Float[Tensor, "head neuron prompt pos"]:
+    all_heads = [
+        (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.n_heads)
+    ] # [head0.0, head0.1, ..., head2.7]
+
+    all_neurons = [
+        (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.d_mlp)
+    ] # [neuron0.0, neuron0.1, ..., neuron2.2047]
+
+    n_total_heads = len(all_heads)
+    n_total_neurons = len(all_neurons)
+    n_prompts = len(tokens)
+    n_pos = len(tokens[0])
+    
+    projection_matrix = torch.zeros(
+        n_total_heads,
+        n_total_neurons,
+        n_prompts,
+        n_pos,
+    )
+
+    for pi in trange(0, len(tokens), mb_size):
+        _, cache = model.run_with_cache(
+            tokens[pi:pi+mb_size], names_filter=act_filter
+        )
+
+        for h, (h_layer, h_idx) in enumerate(all_heads):
+            for mlp_layer in range(model.cfg.n_layers):
+
+                writer_out = cache['result', h_layer][:, :, h_idx, :]
+                cleaner_out = get_full_layer_neuron_output(cache, mlp_layer)
+
+                n_start = mlp_layer * model.cfg.d_mlp
+                n_end = (mlp_layer + 1) * model.cfg.d_mlp
+
+                projection_matrix[h, n_start:n_end, pi:pi+10, :] = proj_func(
+                    writer_out, cleaner_out
+                )
+
+    return projection_matrix
+
+# %%
+# old (and slow) version
 def calc_node_node_projection(
     tokens: List[int],
     proj_func: Callable,
@@ -182,7 +190,7 @@ def calc_node_node_projection(
 
     for pi in trange(0, len(tokens), 10):
         _, cache = model.run_with_cache(
-            tokens[pi : pi + 10], names_filter=get_node_outputs_and_resid
+            tokens[pi : pi + 10], names_filter=act_filter
         )
 
         for w, (lw, hw) in enumerate(all_heads):
@@ -194,10 +202,14 @@ def calc_node_node_projection(
                 )
 
     return projection_matrix
-# %% Calculate node-node projections data
-node_node_projections = calc_node_node_projection(prompts_t, proj_func=projection)
+# %%
 
-#%% Plot node-node projections
+# node_node_projections = calc_node_node_projection(prompts_t[:10], proj_func=projection)
+node_node_projections = calc_node_node_projection_full_mlp(prompts_t, proj_func=projection_full_layer_neurons, mb_size=1)
+
+# %%
+# torch.save(node_node_projections, "node_node_projections.pt")
+#%%
 get_fig_head_to_mlp_neuron(
     projections=node_node_projections,
     quantile=0.1,
@@ -308,7 +320,7 @@ def calc_node_resid_projection(
 
     for pi in trange(0, len(tokens), 10):
         _, cache = model.run_with_cache(
-            tokens[pi : pi + 10], names_filter=get_node_outputs_and_resid
+            tokens[pi : pi + 10], names_filter=act_filter
         )
 
         for w, (lw, hw) in enumerate(all_heads):
@@ -331,10 +343,9 @@ all_resids = [
     (l, act) for l in range(model.cfg.n_layers) for act in ['resid_mid', 'resid_post']
 ] # [resid_mid0, resid_post0, resid_mid1, ... ,resid_post2]
 
-def plot_projection(proj_func: Callable):
-    node_resid_projection_matrix = calc_node_resid_projection(prompts_t, proj_func)
+def plot_projection_node_resid(node_projections, proj_func: Callable):
     px.imshow(
-        node_resid_projection_matrix.flatten(start_dim=-2).mean(dim=-1),
+        node_projections.flatten(start_dim=-2).mean(dim=-1),
         color_continuous_midpoint=0,
         color_continuous_scale='RdBu',
         y=[f"Head {layer}.{head}" for layer, head in all_heads],
@@ -342,9 +353,28 @@ def plot_projection(proj_func: Callable):
         title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
     ).show()
 
-plot_projection(projection)
-plot_projection(cos_similarity)
+node_resid_projections = calc_node_resid_projection(prompts_t, projection)
+plot_projection_node_resid(node_resid_projections, projection)
 
 
 
+# %%
+# Calculate cosine similarity between W_in and W_out
+
+W_in: Float[Tensor, 'layer dmodel dmlp'] = model.W_in
+W_out: Float[Tensor, 'layer dmlp dmodel'] = model.W_out
+
+neuron_weight_cosine_similarity = einops.einsum(
+    W_in / W_in.norm(dim=-2, keepdim=True),
+    W_out / W_out.norm(dim=-1, keepdim=True),
+    "layer dmodel dmlp, layer dmlp dmodel -> layer dmlp"
+)
+# %%
+px.histogram(
+    neuron_weight_cosine_similarity.flatten().cpu().numpy(), 
+    title="Cosine Similarity between W_in and W_out"
+).show()
+# %%
+# neuron_weight_cosine_similarity.flatten()[neuron_weight_cosine_similarity.flatten() < -0.4].sum()
+(neuron_weight_cosine_similarity.flatten() < -0.4).sum()
 # %%
