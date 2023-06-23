@@ -68,10 +68,9 @@ def get_full_layer_neuron_output(
 # torch.isclose(custom_mlp_out, activation_cache["mlp_out", layer], atol= 1e-5).all()
 
 # %% Get pattern with transformerlens
-def act_filter(name: str) -> bool:
+def act_filter(name: str,) -> bool:
     hook_names = ["result", "post", "resid_mid", "resid_post"]
     return any(hook_name in name for hook_name in hook_names)
-
 
 # %% Projection functions
 def projection(
@@ -277,9 +276,6 @@ hn_proj, fig = single_head_neuron_projection(
 
 fig.show()
 
-
-
-
 #%%
 # def plot_projection_node_node(node_node_projection_matrix: Float[Tensor, "head neuron prompt pos"], proj_func: Callable):
 #     px.imshow(
@@ -353,8 +349,18 @@ def plot_projection_node_resid(node_projections, proj_func: Callable):
         title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
     ).show()
 
-node_resid_projections = calc_node_resid_projection(prompts_t, projection)
+node_resid_projections = calc_node_resid_projection(prompts_t, projection) # [n_heads * n_layers, n_resid_stages * n_layers, batch, pos]
 plot_projection_node_resid(node_resid_projections, projection)
+
+#%%
+def plot_node_resid_projection(
+    node_projections: Float[Tensor, "total_heads total_resids batch pos"],
+    proj_func: Callable
+) -> False:
+    node_projections = einops.reduce(node_projections, "total_heads total_resids batch pos -> total_heads total_resids", "mean")
+    
+
+
 
 
 
@@ -377,4 +383,71 @@ px.histogram(
 # %%
 # neuron_weight_cosine_similarity.flatten()[neuron_weight_cosine_similarity.flatten() < -0.4].sum()
 (neuron_weight_cosine_similarity.flatten() < -0.4).sum()
+
+# %% Inspect usage of direction of single writer node's output across residual stream
+
+def single_head_full_resid_projection(
+    prompts, 
+    writer_layer: int, 
+    writer_idx: int, 
+    return_fig: bool = False
+) -> Float[Tensor, "projection_values"]:
+
+    # Get act names
+    writer_hook_name = get_act_name("result", writer_layer)
+    resid_hook_names = ["resid_mid", "resid_post"]
+    
+
+    # Run with cache on all prompts (at once?)
+    _, cache = model.run_with_cache(
+        prompts,
+        names_filter= lambda name: (any(hook_name in name for hook_name in resid_hook_names)) or (name == writer_hook_name)
+        )
+    
+    # calc projections vectorized (is the projection function valid for this vectorized operation?)
+    # [ n_resid = 2*n_layers, batch, pos ]
+
+    projections = torch.zeros(size=(2*model.cfg.n_layers, len(prompts), model.cfg.n_ctx))
+    for layer in range(model.cfg.n_layers):
+        for i, resid_stage in enumerate(resid_hook_names):
+            resid_hook_name = get_act_name(resid_stage, layer)
+
+            projections[2*layer + i] = projection(
+                writer_out=cache[writer_hook_name][:, :, writer_idx, :],
+                cleanup_out=cache[resid_hook_name]
+            )
+    projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
+
+    if return_fig:
+        resid_labels = []
+        for i in range(model.cfg.n_layers):
+            resid_labels.append(f"L{i}_resid_mid")
+            resid_labels.append(f"L{i}_resid_post")
+
+        d = {"projection_value": projections.cpu().numpy(),
+             "labels": resid_labels}
+        df = pd.DataFrame(d)
+
+        fig = px.line(
+            df,
+            x="labels",
+            y="projection_value",
+            title=f"",
+        )
+
+        return projections, fig
+    else:
+        return projections
+
+# %% Inspect single head full resid projection
+
+hr_proj, fig = single_head_full_resid_projection(
+    prompts_t[0],
+    writer_layer=1,
+    writer_idx=6,
+    return_fig=True
+)
+
+fig.show()
+
 # %%
