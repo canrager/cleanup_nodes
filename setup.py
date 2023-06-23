@@ -16,7 +16,8 @@ from jaxtyping import Float, Int, Bool
 from typing import List, Callable
 from plotting import (
     get_fig_head_to_mlp_neuron,
-    get_fig_head_to_mlp_neuron_by_layer
+    get_fig_head_to_mlp_neuron_by_layer,
+    get_fig_head_to_selected_mlp_neuron
 )
 from load_data import get_prompts_t
 from utils import (
@@ -43,34 +44,54 @@ logits, activation_cache = model.run_with_cache(prompts_t[10])
 # print("prediction:", model.to_str_tokens(logits.argmax(dim=-1)[0, -1]))
 
 # %% Select neurons
-thres = -0.4
-selected_neurons = select_neurons_by_cosine_similarity(model, thres)
+thres = -0.3
+selected_neurons = select_neurons_by_cosine_similarity(model, thres, show_distribution=True)
+print(len(selected_neurons))
 # %% Calculate and plot node-node projection
 node_node_projections = calc_node_node_projection(
     model, 
-    prompts_t, 
+    prompts_t[:10], 
     selected_neurons,
     proj_func=projection
 )
-#%% Find concrete neuron-head pairs
+# %% Find concrete neuron-head pairs
+all_heads = [
+    (l, h) for l in range(model.cfg.n_layers) for h in range(model.cfg.n_heads)
+]  # [head0.0, head0.1, ..., head2.7]
+
+
+projection_quantile = node_node_projections.flatten(start_dim=-2).quantile(0.1, dim=-1)
+thres = -0.3
+selected_pairs = [
+    (all_heads[head], selected_neurons[neuron])
+    for head in range(projection_quantile.shape[0])
+    for neuron in range(projection_quantile.shape[1])
+    if projection_quantile[head, neuron] < thres
+]
+selected_pairs = [
+    (head, neuron)
+    for head, neuron in selected_pairs
+    if head[0] < neuron[0] and neuron[0] != model.cfg.n_layers - 1
+]
+selected_pairs
 
 
 # %%
-get_fig_head_to_mlp_neuron(
+get_fig_head_to_selected_mlp_neuron(
     projections=node_node_projections,
-    quantile=0.1,
     k=50,
-    n_heads=model.cfg.n_heads,
-    d_mlp=model.cfg.d_mlp
-).show()
-
-
-get_fig_head_to_mlp_neuron_by_layer(
-    projections=node_node_projections,
-    k=10,
     quantile=0.1,
+    neuron_names=selected_neurons,
     n_layers=model.cfg.n_layers,
 ).show()
+
+
+# get_fig_head_to_mlp_neuron_by_layer(
+#     projections=node_node_projections,
+#     k=10,
+#     quantile=0.1,
+#     n_layers=model.cfg.n_layers,
+# ).show()
 
 
 # %% Calculate and plot node-resid projection
@@ -150,31 +171,7 @@ fig.show()
 #     ).show()
 
 # plot_projection_node_node(node_node_projections, projection)
-# %%
 
-
-# %%
-
-
-# %%
-# Calculate cosine similarity between W_in and W_out
-
-W_in: Float[Tensor, 'layer dmodel dmlp'] = model.W_in
-W_out: Float[Tensor, 'layer dmlp dmodel'] = model.W_out
-
-neuron_weight_cosine_similarity = einops.einsum(
-    W_in / W_in.norm(dim=-2, keepdim=True),
-    W_out / W_out.norm(dim=-1, keepdim=True),
-    "layer dmodel dmlp, layer dmlp dmodel -> layer dmlp"
-)
-# %%
-px.histogram(
-    neuron_weight_cosine_similarity.flatten().cpu().numpy(), 
-    title="Cosine Similarity between W_in and W_out"
-).show()
-# %%
-# neuron_weight_cosine_similarity.flatten()[neuron_weight_cosine_similarity.flatten() < -0.4].sum()
-(neuron_weight_cosine_similarity.flatten() < -0.4).sum()
 
 # %% Inspect usage of direction of single writer node's output across residual stream
 
@@ -182,7 +179,9 @@ def single_head_full_resid_projection(
     prompts, 
     writer_layer: int, 
     writer_idx: int, 
-    return_fig: bool = False
+    neuron_layer: int,
+    neuron_idx: int,
+    return_fig: bool = False,
 ) -> Float[Tensor, "projection_values"]:
 
     # Get act names
@@ -224,22 +223,25 @@ def single_head_full_resid_projection(
             df,
             x="labels",
             y="projection_value",
-            title=f"",
+            title=f"H{writer_layer}.{writer_idx} projection onto residual stream (linked with N{neuron_layer}.{neuron_idx})",
         )
+        fig.add_vline(x=neuron_layer * 2, line_dash="dash", line_color="black")
 
         return projections, fig
     else:
         return projections
 
 # %% Inspect single head full resid projection
+for (hl, hi), (nl, ni) in selected_pairs:
+    hr_proj, fig = single_head_full_resid_projection(
+        prompts_t[0],
+        writer_layer=hl,
+        writer_idx=hi,
+        neuron_layer=nl,
+        neuron_idx=ni,
+        return_fig=True,
+    )
 
-hr_proj, fig = single_head_full_resid_projection(
-    prompts_t[0],
-    writer_layer=1,
-    writer_idx=6,
-    return_fig=True
-)
-
-fig.show()
+    fig.show()
 
 # %%
