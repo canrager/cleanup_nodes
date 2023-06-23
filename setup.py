@@ -357,8 +357,38 @@ def plot_node_resid_projection(
     node_projections: Float[Tensor, "total_heads total_resids batch pos"],
     proj_func: Callable
 ) -> False:
-    node_projections = einops.reduce(node_projections, "total_heads total_resids batch pos -> total_heads total_resids", "mean")
+    node_projections = einops.reduce(node_projections, "total_heads total_resids batch pos -> total_heads total_resids", "mean").flatten().cpu().numpy()
+    # node_projections = einops.rearrange(
+    #     node_resid_projections, 
+    #     "(n_layers n_heads) total_resids -> n_layers n_heads total_resids", 
+    #     n_layers=model.cfg.n_layers,
+    #     n_heads=model.cfg.n_heads).flatten().cpu().numpy()
     
+    nlayer_labels = einops.repeat(np.arange(model.cfg.n_layers), "layer -> (layer nheads total_resids)", nheads=model.cfg.n_heads, total_resids=8)
+    nheads_labels = einops.repeat(np.arange(model.cfg.n_heads), "nheads -> (layer nheads total_resids)", layer=model.cfg.n_layers, total_resids=8)
+    nresid_labels = einops.repeat(np.arange(2 * model.cfg.n_layers), "total_resids -> (layer nheads total_resids)", layer=model.cfg.n_layers, nheads=model.cfg.n_heads)
+
+    df = pd.DataFrame({
+        "n_layers": nlayer_labels,
+        "n_heads": nheads_labels,
+        "n_resids": nresid_labels,
+        "projection_values": node_projections
+    })
+    fig = px.line(
+            df,
+            x="n_resids",
+            y="projection_values",
+            color="n_heads",
+            title=f"",
+            animation_frame="n_layers",
+            range_y=[node_projections.min(), node_projections.max()]
+        )
+
+    return fig
+
+fig = plot_node_resid_projection(node_resid_projections, projection)
+fig.show()
+
 
 
 
