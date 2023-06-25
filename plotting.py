@@ -7,13 +7,14 @@ TODO:
   - Currently using quantile
   - Can try proportion of (batch*pos) greater/lesser than some threshold
 
-
 """
 
-#%%
+# %%
 import itertools
+from typing import Tuple
 import numpy as np
 import torch as t
+import pandas as pd
 
 import einops
 from jaxtyping import Float
@@ -127,14 +128,13 @@ def get_fig_head_to_mlp_neuron_by_layer(
     ).quantile(quantile, dim=-1)  # shape: (head, layer, neuron_in_layer)
 
     largest_first = quantile >= 0.5
-
     projections_topk = projections_quantile.topk(k, dim=-1, largest=largest_first)
 
     # Create head names for hover text
     n_heads = projections.shape[0] // n_layers
     head_names = [_head_index_to_name(i, n_heads) for i in range(projections.shape[0])]
 
-    # Create neuron names for hever text
+    # Create neuron names for hover text
     neuron_names = []
     heads, layers, neurons = projections_topk.indices.shape
     for head in range(heads):
@@ -152,10 +152,7 @@ def get_fig_head_to_mlp_neuron_by_layer(
 
     # Create main figure
     absmax = projections_topk_values.abs().max().item()
-    title = (
-        f"Top {k} Neurons per Layer<br>"
-        f"Batch-pos aggregation: q={quantile}"
-    )
+    title = f"Top {k} Neurons per Layer<br>" f"Batch-pos aggregation: q={quantile}"
 
     fig = px.imshow(
         projections_topk_values,
@@ -177,34 +174,120 @@ def get_fig_head_to_mlp_neuron_by_layer(
     fig.update(data=data)
 
     # Hide x ticks
-    fig.update_layout({'xaxis': {'showticklabels': False}})
+    fig.update_layout({"xaxis": {"showticklabels": False}})
 
     # Add vertical and horizontal lines to separate layers
     vline_positions = [x for x in range(k, k * n_layers, k)]
     for vpos in vline_positions:
-        fig.add_vline(x=vpos-0.5, line_dash="dash", line_color="black")
+        fig.add_vline(x=vpos - 0.5, line_dash="dash", line_color="black")
 
     hline_positions = [x for x in range(n_heads, n_heads * n_layers, n_heads)]
     for hpos in hline_positions:
-        fig.add_hline(y=hpos-0.5, line_dash="dash", line_color="black")
+        fig.add_hline(y=hpos - 0.5, line_dash="dash", line_color="black")
+
+    return fig
+
+
+def get_fig_head_to_selected_mlp_neuron(
+    projections: Float[t.Tensor, "head neuron prompt pos"],
+    k: int,
+    quantile: float,
+    neuron_names: Tuple[int, int],
+    n_layers: int,
+) -> go.Figure:
+    """
+    TODO: describe function
+
+    Args:
+        projections: a tensor of projection values
+        k: the number of neurons to plot for each head
+        neuron_names: a tuple of (layer, neuron) indices
+        n_layers: the number of layers
+
+    Returns:
+        A plotly figure
+    """
+    # Aggregate along the batch*pos dimenions
+    projections_flattened = einops.rearrange(
+        projections, "head neuron batch pos -> head neuron (batch pos)",
+    )
+    projections_aggregated = projections_flattened.quantile(quantile, dim=-1)
+
+    # Get top k neurons for each head
+    largest_first = quantile >= 0.5
+    projections_topk = projections_aggregated.topk(
+        k, dim=-1, largest=largest_first, sorted=True,
+    )
+
+    # Create head names for hover text
+    n_heads = projections.shape[0] // n_layers
+    head_names = [_head_index_to_name(i, n_heads) for i in range(projections.shape[0])]
+
+    # Create neuron names for hover text
+    neuron_names_string = []
+    heads, neurons = projections_topk.indices.shape
+    for head in range(heads):
+        row = []
+        for neuron in range(neurons):
+            selected_neuron_index = projections_topk.indices[head, neuron].item()
+            layer, neuron_index = neuron_names[selected_neuron_index]
+            row.append(f"N{layer}.{neuron_index}")
+        neuron_names_string.append(row)
+
+   # Compute some plotting params
+    absmax = projections_topk.values.abs().max().item()
+
+    fig = px.imshow(
+        projections_topk.values,
+        y=head_names,
+        labels=dict(x=f"Neuron Rank", y="Head"),
+        zmin=-absmax,
+        zmax=absmax,
+        color_continuous_scale="RdBu",
+        title=f"Top {k} Quantiles of Selected Neurons (Head to Neuron, q={quantile})",
+    )
+
+    # Add hover text
+    hovertemplate = (
+        "Metric Name: %{z}<br><br>"
+        "Head Name: %{y}<br>"
+        "Neuron Name: %{customdata}<br>"
+        "Neuron Rank: %{x}<br>"
+    )
+    data = [{"hovertemplate": hovertemplate, "customdata": neuron_names_string}]
+    fig.update(data=data)
 
     return fig
 
 
 
-
 # ----- DEMONSTRATION ------------------------------------------------------- #
-#%%
+# %%
 if __name__ == "__main__":
-
     quantile = 0.1
-    k = 10
+    k = 50
 
     n_heads = 4
     n_layers = 3
     d_mlp = 32 * 4
 
     projections = t.randn(n_layers * n_heads, n_layers * d_mlp, 10, 100)
-    
-    fig = get_fig_head_to_mlp_neuron_by_layer(projections, k, quantile, n_layers)
+
+    # fig = get_fig_head_to_mlp_neuron_by_layer(projections, k, quantile, n_layers)
+    # fig.show()
+
+    # Generate random neuron_names
+    np.random.seed(42)
+    neuron_names = []
+    for layer in range(n_layers):
+        neuron_indices = list(range(d_mlp * 8))
+        np.random.shuffle(neuron_indices)
+        k_selected = np.random.randint(-50, 50) + projections.shape[1] // n_layers
+        k_selected = max(k_selected, 30)
+        neuron_indices = sorted(neuron_indices[:k_selected])
+        for n in neuron_indices:
+            neuron_names.append((layer, n))
+    neuron_names = neuron_names[:projections.shape[1]]
+
+    fig = get_fig_head_to_selected_mlp_neuron(projections, k, neuron_names, n_layers)
     fig.show()
