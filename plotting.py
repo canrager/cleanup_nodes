@@ -18,7 +18,7 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
-from typing import Optional
+from typing import Optional, Union
 from torch import Tensor
 
 import plotly.express as px
@@ -130,7 +130,9 @@ def get_fig_head_to_mlp_neuron_by_layer(
         projections,
         "head (layer n) batch pos -> head layer n (batch pos)",
         layer=n_layers,
-    ).quantile(quantile, dim=-1)  # shape: (head, layer, neuron_in_layer)
+    ).quantile(
+        quantile, dim=-1
+    )  # shape: (head, layer, neuron_in_layer)
 
     largest_first = quantile >= 0.5
     projections_topk = projections_quantile.topk(k, dim=-1, largest=largest_first)
@@ -214,14 +216,18 @@ def get_fig_head_to_selected_mlp_neuron(
     """
     # Aggregate along the batch*pos dimenions
     projections_flattened = einops.rearrange(
-        projections, "head neuron batch pos -> head neuron (batch pos)",
+        projections,
+        "head neuron batch pos -> head neuron (batch pos)",
     )
     projections_aggregated = projections_flattened.quantile(quantile, dim=-1)
 
     # Get top k neurons for each head
     largest_first = quantile >= 0.5
     projections_topk = projections_aggregated.topk(
-        k, dim=-1, largest=largest_first, sorted=True,
+        k,
+        dim=-1,
+        largest=largest_first,
+        sorted=True,
     )
 
     # Create head names for hover text
@@ -239,7 +245,7 @@ def get_fig_head_to_selected_mlp_neuron(
             row.append(f"N{layer}.{neuron_index}")
         neuron_names_string.append(row)
 
-   # Compute some plotting params
+    # Compute some plotting params
     absmax = projections_topk.values.abs().max().item()
 
     fig = px.imshow(
@@ -264,6 +270,114 @@ def get_fig_head_to_selected_mlp_neuron(
 
     return fig
 
+
+def single_head_full_resid_projection(
+    model,
+    prompts,
+    writer_layer: int,
+    writer_idx: int,
+    neuron_layer: Optional[int] = None,
+    neuron_idx: Optional[int] = None,
+    return_fig: bool = False,
+    box_plot: bool = True,
+) -> Float[Tensor, "projection_values"]:
+    """
+    
+    """
+    # Get act names
+    writer_hook_name = get_act_name("result", writer_layer)
+    resid_hook_names = ["resid_mid", "resid_post"]
+
+    # Run with cache on all prompts (at once?)
+    _, cache = model.run_with_cache(
+        prompts,
+        names_filter=lambda name: ("resid" in name) or (name == writer_hook_name),
+    )
+
+    # calc projections vectorized (is the projection function valid for this vectorized operation?)
+    # [ n_resid = 2*n_layers, batch, pos ]
+
+    projections = t.zeros(
+        size=(2 * model.cfg.n_layers + 1, len(prompts), model.cfg.n_ctx)
+    )
+
+    # add resid pre layer 0
+    resid_hook_name = get_act_name("resid_pre", 0)
+    projections[0] = projection(
+        writer_out=cache[writer_hook_name][:, :, writer_idx, :],
+        cleanup_out=cache[resid_hook_name],
+    )
+
+    # add resid mid and post for all layers
+    for layer in range(model.cfg.n_layers):
+        for i, resid_stage in enumerate(resid_hook_names):
+            resid_hook_name = get_act_name(resid_stage, layer)
+
+            projections[2 * layer + i + 1] = projection(
+                writer_out=cache[writer_hook_name][:, :, writer_idx, :],
+                cleanup_out=cache[resid_hook_name],
+            )
+    projections_full = projections.flatten()  # shape: [n_resid*batch*pos]
+    projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
+
+    if return_fig:
+        resid_labels = ["L0_resid_pre"]
+        for i in range(model.cfg.n_layers):
+            resid_labels.append(f"L{i}_resid_mid")
+            resid_labels.append(f"L{i}_resid_post")
+
+
+
+        # Set title
+        title = f"H{writer_layer}.{writer_idx} projection onto residual stream"
+        if neuron_layer and neuron_idx:
+            title += f"(linked with N{neuron_layer}.{neuron_idx})"
+
+        if box_plot:
+            repeated_labels = np.repeat(resid_labels, len(prompts) * model.cfg.n_ctx)
+            df = pd.DataFrame(
+                {
+                    "projection_value": projections_full.cpu().numpy(),
+                    "labels": repeated_labels,
+                }
+            )
+            fig = px.box(
+                df,
+                x="labels",
+                y="projection_value",
+                title=title,
+            )
+        else: # line plot
+            d = {"projection_value": projections.cpu().numpy(), "labels": resid_labels}
+            df = pd.DataFrame(d)
+            fig = px.line(
+                df,
+                x="labels",
+                y="projection_value",
+                title=title,
+            )
+        if neuron_layer and neuron_idx:
+            fig.add_vline(x=neuron_layer * 2 + 1, line_dash="dash", line_color="black")
+
+            
+        return projections, fig
+    else:
+        return projections
+
+
+def ntensor_to_long(tensor: Union[Tensor, np.array]) -> np.array:
+    """
+    Converts an n-dimensional tensor to a long format dataframe.
+    """
+    df = pd.DataFrame()
+    df["values"] = tensor.cpu().numpy().flatten()
+
+    for i, _ in enumerate(tensor.shape):
+        pattern = np.repeat(np.arange(tensor.shape[i]), np.prod(tensor.shape[i+1:]))
+        n_repeats = np.prod(tensor.shape[:i])
+        df[f"dim{i}"] = np.tile(pattern, n_repeats)
+    
+    return df
 
 
 # ----- DEMONSTRATION ------------------------------------------------------- #
@@ -292,70 +406,7 @@ if __name__ == "__main__":
         neuron_indices = sorted(neuron_indices[:k_selected])
         for n in neuron_indices:
             neuron_names.append((layer, n))
-    neuron_names = neuron_names[:projections.shape[1]]
+    neuron_names = neuron_names[: projections.shape[1]]
 
     fig = get_fig_head_to_selected_mlp_neuron(projections, k, neuron_names, n_layers)
     fig.show()
-
-def single_head_full_resid_projection(
-    model,
-    prompts, 
-    writer_layer: int, 
-    writer_idx: int, 
-    neuron_layer: Optional[int] = None,
-    neuron_idx: Optional[int] = None,
-    return_fig: bool = False,
-) -> Float[Tensor, "projection_values"]:
-
-    # Get act names
-    writer_hook_name = get_act_name("result", writer_layer)
-    resid_hook_names = ["resid_mid", "resid_post"]
-    
-
-    # Run with cache on all prompts (at once?)
-    _, cache = model.run_with_cache(
-        prompts,
-        names_filter= lambda name: (any(hook_name in name for hook_name in resid_hook_names)) or (name == writer_hook_name)
-        )
-    
-    # calc projections vectorized (is the projection function valid for this vectorized operation?)
-    # [ n_resid = 2*n_layers, batch, pos ]
-
-    projections = t.zeros(size=(2*model.cfg.n_layers, len(prompts), model.cfg.n_ctx))
-    for layer in range(model.cfg.n_layers):
-        for i, resid_stage in enumerate(resid_hook_names):
-            resid_hook_name = get_act_name(resid_stage, layer)
-
-            projections[2*layer + i] = projection(
-                writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-                cleanup_out=cache[resid_hook_name]
-            )
-    projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
-
-    if return_fig:
-        resid_labels = []
-        for i in range(model.cfg.n_layers):
-            resid_labels.append(f"L{i}_resid_mid")
-            resid_labels.append(f"L{i}_resid_post")
-
-        d = {"projection_value": projections.cpu().numpy(),
-             "labels": resid_labels}
-        df = pd.DataFrame(d)
-
-        # Set title
-        title = f"H{writer_layer}.{writer_idx} projection onto residual stream"
-        if neuron_layer and neuron_idx:
-            title += f"(linked with N{neuron_layer}.{neuron_idx})"
-
-        fig = px.line(
-            df,
-            x="labels",
-            y="projection_value",
-            title=title,
-        )
-        if neuron_layer and neuron_idx:
-            fig.add_vline(x=neuron_layer * 2, line_dash="dash", line_color="black")
-
-        return projections, fig
-    else:
-        return projections
