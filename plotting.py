@@ -311,7 +311,11 @@ def single_head_full_resid_projection(
     neuron_layer: Optional[int] = None,
     neuron_idx: Optional[int] = None,
     return_fig: bool = False,
+    box_plot: bool = True,
 ) -> Float[Tensor, "projection_values"]:
+    """
+    
+    """
     # Get act names
     writer_hook_name = get_act_name("result", writer_layer)
     resid_hook_names = ["resid_mid", "resid_post"]
@@ -345,6 +349,7 @@ def single_head_full_resid_projection(
                 writer_out=cache[writer_hook_name][:, :, writer_idx, :],
                 cleanup_out=cache[resid_hook_name],
             )
+    projections_full = projections.flatten()  # shape: [n_resid*batch*pos]
     projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
 
     if return_fig:
@@ -353,23 +358,40 @@ def single_head_full_resid_projection(
             resid_labels.append(f"L{i}_resid_mid")
             resid_labels.append(f"L{i}_resid_post")
 
-        d = {"projection_value": projections.cpu().numpy(), "labels": resid_labels}
-        df = pd.DataFrame(d)
+
 
         # Set title
         title = f"H{writer_layer}.{writer_idx} projection onto residual stream"
         if neuron_layer and neuron_idx:
             title += f"(linked with N{neuron_layer}.{neuron_idx})"
 
-        fig = px.line(
-            df,
-            x="labels",
-            y="projection_value",
-            title=title,
-        )
+        if box_plot:
+            repeated_labels = np.repeat(resid_labels, len(prompts) * model.cfg.n_ctx)
+            df = pd.DataFrame(
+                {
+                    "projection_value": projections_full.cpu().numpy(),
+                    "labels": repeated_labels,
+                }
+            )
+            fig = px.box(
+                df,
+                x="labels",
+                y="projection_value",
+                title=title,
+            )
+        else: # line plot
+            d = {"projection_value": projections.cpu().numpy(), "labels": resid_labels}
+            df = pd.DataFrame(d)
+            fig = px.line(
+                df,
+                x="labels",
+                y="projection_value",
+                title=title,
+            )
         if neuron_layer and neuron_idx:
             fig.add_vline(x=neuron_layer * 2 + 1, line_dash="dash", line_color="black")
 
+            
         return projections, fig
     else:
         return projections
