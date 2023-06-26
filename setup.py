@@ -122,7 +122,7 @@ def single_head_neuron_projection(
         )
 
     # Get ouput per neuron from mlp_post
-    full_neuron_output = get_neuron_output(cache, cleaner_layer, cleaner_idx)
+    full_neuron_output = get_neuron_output(cache, model, cleaner_layer, cleaner_idx)
 
     # Select specific idx
     # calc projections vectorized (is the projection function valid for this vectorized operation?)
@@ -191,7 +191,7 @@ def plot_projection_node_resid(node_projections, proj_func: Callable):
         title=f"Projection of Resid to Attn Head Output Direction using {proj_func.__name__}"
     ).show()
 
-node_resid_projections = calc_node_resid_projection(prompts_t, projection) # [n_heads * n_layers, n_resid_stages * n_layers, batch, pos]
+node_resid_projections = calc_node_resid_projection(model, prompts_t, projection) # [n_heads * n_layers, n_resid_stages * n_layers, batch, pos]
 plot_projection_node_resid(node_resid_projections, projection)
 
 #%%

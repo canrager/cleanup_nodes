@@ -18,9 +18,14 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
+from typing import Optional
+from torch import Tensor
 
 import plotly.express as px
 import plotly.graph_objects as go
+
+from transformer_lens.utils import get_act_name
+from utils import projection
 
 
 def _neuron_index_to_name(neuron_index: int, d_mlp: int) -> str:
@@ -291,3 +296,66 @@ if __name__ == "__main__":
 
     fig = get_fig_head_to_selected_mlp_neuron(projections, k, neuron_names, n_layers)
     fig.show()
+
+def single_head_full_resid_projection(
+    model,
+    prompts, 
+    writer_layer: int, 
+    writer_idx: int, 
+    neuron_layer: Optional[int] = None,
+    neuron_idx: Optional[int] = None,
+    return_fig: bool = False,
+) -> Float[Tensor, "projection_values"]:
+
+    # Get act names
+    writer_hook_name = get_act_name("result", writer_layer)
+    resid_hook_names = ["resid_mid", "resid_post"]
+    
+
+    # Run with cache on all prompts (at once?)
+    _, cache = model.run_with_cache(
+        prompts,
+        names_filter= lambda name: (any(hook_name in name for hook_name in resid_hook_names)) or (name == writer_hook_name)
+        )
+    
+    # calc projections vectorized (is the projection function valid for this vectorized operation?)
+    # [ n_resid = 2*n_layers, batch, pos ]
+
+    projections = t.zeros(size=(2*model.cfg.n_layers, len(prompts), model.cfg.n_ctx))
+    for layer in range(model.cfg.n_layers):
+        for i, resid_stage in enumerate(resid_hook_names):
+            resid_hook_name = get_act_name(resid_stage, layer)
+
+            projections[2*layer + i] = projection(
+                writer_out=cache[writer_hook_name][:, :, writer_idx, :],
+                cleanup_out=cache[resid_hook_name]
+            )
+    projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
+
+    if return_fig:
+        resid_labels = []
+        for i in range(model.cfg.n_layers):
+            resid_labels.append(f"L{i}_resid_mid")
+            resid_labels.append(f"L{i}_resid_post")
+
+        d = {"projection_value": projections.cpu().numpy(),
+             "labels": resid_labels}
+        df = pd.DataFrame(d)
+
+        # Set title
+        title = f"H{writer_layer}.{writer_idx} projection onto residual stream"
+        if neuron_layer and neuron_idx:
+            title += f"(linked with N{neuron_layer}.{neuron_idx})"
+
+        fig = px.line(
+            df,
+            x="labels",
+            y="projection_value",
+            title=title,
+        )
+        if neuron_layer and neuron_idx:
+            fig.add_vline(x=neuron_layer * 2, line_dash="dash", line_color="black")
+
+        return projections, fig
+    else:
+        return projections
