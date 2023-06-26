@@ -18,7 +18,7 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
-from typing import Optional
+from typing import Optional, Union
 from torch import Tensor
 
 import plotly.express as px
@@ -271,38 +271,6 @@ def get_fig_head_to_selected_mlp_neuron(
     return fig
 
 
-# ----- DEMONSTRATION ------------------------------------------------------- #
-# %%
-if __name__ == "__main__":
-    quantile = 0.1
-    k = 50
-
-    n_heads = 4
-    n_layers = 3
-    d_mlp = 32 * 4
-
-    projections = t.randn(n_layers * n_heads, n_layers * d_mlp, 10, 100)
-
-    # fig = get_fig_head_to_mlp_neuron_by_layer(projections, k, quantile, n_layers)
-    # fig.show()
-
-    # Generate random neuron_names
-    np.random.seed(42)
-    neuron_names = []
-    for layer in range(n_layers):
-        neuron_indices = list(range(d_mlp * 8))
-        np.random.shuffle(neuron_indices)
-        k_selected = np.random.randint(-50, 50) + projections.shape[1] // n_layers
-        k_selected = max(k_selected, 30)
-        neuron_indices = sorted(neuron_indices[:k_selected])
-        for n in neuron_indices:
-            neuron_names.append((layer, n))
-    neuron_names = neuron_names[: projections.shape[1]]
-
-    fig = get_fig_head_to_selected_mlp_neuron(projections, k, neuron_names, n_layers)
-    fig.show()
-
-
 def single_head_full_resid_projection(
     model,
     prompts,
@@ -395,3 +363,50 @@ def single_head_full_resid_projection(
         return projections, fig
     else:
         return projections
+
+
+def ntensor_to_long(tensor: Union[Tensor, np.array]) -> np.array:
+    """
+    Converts an n-dimensional tensor to a long format dataframe.
+    """
+    df = pd.DataFrame()
+    df["values"] = tensor.cpu().numpy().flatten()
+
+    for i, _ in enumerate(tensor.shape):
+        pattern = np.repeat(np.arange(tensor.shape[i]), np.prod(tensor.shape[i+1:]))
+        n_repeats = np.prod(tensor.shape[:i])
+        df[f"dim{i}"] = np.tile(pattern, n_repeats)
+    
+    return df
+
+
+# ----- DEMONSTRATION ------------------------------------------------------- #
+# %%
+if __name__ == "__main__":
+    quantile = 0.1
+    k = 50
+
+    n_heads = 4
+    n_layers = 3
+    d_mlp = 32 * 4
+
+    projections = t.randn(n_layers * n_heads, n_layers * d_mlp, 10, 100)
+
+    # fig = get_fig_head_to_mlp_neuron_by_layer(projections, k, quantile, n_layers)
+    # fig.show()
+
+    # Generate random neuron_names
+    np.random.seed(42)
+    neuron_names = []
+    for layer in range(n_layers):
+        neuron_indices = list(range(d_mlp * 8))
+        np.random.shuffle(neuron_indices)
+        k_selected = np.random.randint(-50, 50) + projections.shape[1] // n_layers
+        k_selected = max(k_selected, 30)
+        neuron_indices = sorted(neuron_indices[:k_selected])
+        for n in neuron_indices:
+            neuron_names.append((layer, n))
+    neuron_names = neuron_names[: projections.shape[1]]
+
+    fig = get_fig_head_to_selected_mlp_neuron(projections, k, neuron_names, n_layers)
+    fig.show()
