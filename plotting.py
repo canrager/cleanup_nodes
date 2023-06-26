@@ -365,7 +365,7 @@ def single_head_full_resid_projection(
         return projections
 
 
-def ntensor_to_long(tensor: Union[Tensor, np.array]) -> np.array:
+def ntensor_to_long(tensor: Union[Tensor, np.array]) -> pd.DataFrame:
     """
     Converts an n-dimensional tensor to a long format dataframe.
     """
