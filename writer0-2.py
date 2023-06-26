@@ -57,7 +57,7 @@ hr_proj, fig = single_head_full_resid_projection(
 fig.show()
 # %% Projection of 8 heads in layer 2 to 0.2 output, mean across 50 prompts, 1024 sequence positions each
 
-BATCH_SIZE = 50
+BATCH_SIZE = 30
 
 # Cache activations for writer and sender heads
 writer_hook_name = get_act_name("result", 0)
@@ -86,7 +86,7 @@ px.bar(df, x="cleanup_heads", y="projection_values", title=f"Projection layer 2 
 # %% Zoom in: For each head: prompt by seq position
 # projections (nheads, batch, pos)
 
-cleaner_head_idx = 1
+cleaner_head_idx = 0
 plot_slice = 2**2
 
 for i in range(plot_slice):
@@ -107,7 +107,7 @@ for i in range(plot_slice):
 
 # %% Compare cleaner heads
 
-cleaner_head_idx = 0
+cleaner_head_idx = 6
 plot_slice = 2**2
 
 for i in range(plot_slice):
