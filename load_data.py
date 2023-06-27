@@ -1,7 +1,11 @@
 # %% Setup dataset
-from datasets import load_dataset
-from tqdm.notebook import trange
 import torch
+
+from datasets import load_dataset
+from tqdm.auto import trange
+
+from jaxtyping import Float
+
 
 def get_prompts_list(dataset_name: str, n_prompts: int, shuffle_buffer_size: int, shuffle_seed: int):
     print(f"Loading {n_prompts} prompts from {dataset_name}...")
@@ -33,10 +37,15 @@ def shuffle_tensor(tensor, dim):
     torch.cuda.manual_seed(DS_SHUFFLE_SEED)
     return tensor[torch.randperm(tensor.shape[dim])]
 
-def get_prompts_t():
-    shuffle_kwargs = dict(shuffle_buffer_size=DS_SHUFFLE_BUFFER_SIZE, shuffle_seed=DS_SHUFFLE_SEED)
-    c4_prompts_list = get_prompts_list("c4-tokenized-2b", n_prompts=N_C4_TOTAL_PROMPTS, **shuffle_kwargs)
-    code_prompts_list = get_prompts_list("code-tokenized", n_prompts=N_CODE_TOTAL_PROMPTS, **shuffle_kwargs)
+def get_prompts_t(
+    n_text_prompts: int = N_C4_TOTAL_PROMPTS,
+    n_code_prompts: int = N_CODE_TOTAL_PROMPTS,
+    shuffle_buffer_size: int = DS_SHUFFLE_BUFFER_SIZE,
+    shuffle_seed: int = DS_SHUFFLE_SEED,
+) -> Float[torch.Tensor, "batch pos"]:
+    shuffle_kwargs = dict(shuffle_buffer_size=shuffle_buffer_size, shuffle_seed=shuffle_seed)
+    c4_prompts_list = get_prompts_list("c4-tokenized-2b", n_prompts=n_text_prompts, **shuffle_kwargs)
+    code_prompts_list = get_prompts_list("code-tokenized", n_prompts=n_code_prompts, **shuffle_kwargs)
     prompts_t = torch.tensor(
         c4_prompts_list + code_prompts_list
     )
