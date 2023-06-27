@@ -31,13 +31,26 @@ def act_filter(name: str) -> bool:
 # %% Projection functions
 def projection(
     writer_out: Float[Tensor, "batch pos dmodel"],
-    cleanup_out: Float[Tensor, "batch pos dmodel"],
+    cleaner_out: Float[Tensor, "batch pos dmodel"],
 ) -> Float[Tensor, "batch pos"]:
     """Compute the projection from the cleanup output vector to the writer output direction"""
     norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
     dot_prod = einops.einsum(
         writer_out / norm_writer_out,
-        cleanup_out,
+        cleaner_out,
+        "batch pos dmodel, batch pos dmodel -> batch pos",
+    )
+    return dot_prod
+
+
+def reinforcement_ratio(
+    writer_out: Float[Tensor, "batch pos dmodel"],
+    cleaner_out: Float[Tensor, "batch pos dmodel"],
+):
+    norm_writer_out = torch.norm(writer_out, dim=-1, keepdim=True)
+    dot_prod = einops.einsum(
+        writer_out / norm_writer_out.pow(2),
+        cleaner_out,
         "batch pos dmodel, batch pos dmodel -> batch pos",
     )
     return dot_prod
