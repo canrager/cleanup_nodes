@@ -128,7 +128,7 @@ def single_head_neuron_projection(
     # calc projections vectorized (is the projection function valid for this vectorized operation?)
     projections = projection(
         writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-        cleanup_out=full_neuron_output
+        cleaner_out=full_neuron_output
     )
 
     if return_fig:
@@ -264,7 +264,7 @@ def single_head_full_resid_projection(
 
             projections[2*layer + i] = projection(
                 writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-                cleanup_out=cache[resid_hook_name]
+                cleaner_out=cache[resid_hook_name]
             )
     projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
 
