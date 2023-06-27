@@ -18,7 +18,7 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 from torch import Tensor
 
 import plotly.express as px
@@ -280,6 +280,7 @@ def single_head_full_resid_projection(
     neuron_idx: Optional[int] = None,
     return_fig: bool = False,
     box_plot: bool = True,
+    proj_func: Callable = projection,
 ) -> Float[Tensor, "projection_values"]:
     """
     
@@ -313,7 +314,7 @@ def single_head_full_resid_projection(
         for i, resid_stage in enumerate(resid_hook_names):
             resid_hook_name = get_act_name(resid_stage, layer)
 
-            projections[2 * layer + i + 1] = projection(
+            projections[2 * layer + i + 1] = proj_func(
                 writer_out=cache[writer_hook_name][:, :, writer_idx, :],
                 cleanup_out=cache[resid_hook_name],
             )
@@ -329,7 +330,7 @@ def single_head_full_resid_projection(
 
 
         # Set title
-        title = f"H{writer_layer}.{writer_idx} projection onto residual stream"
+        title = f"Project Residual stream onto the direction of H{writer_layer}.{writer_idx} using {proj_func.__name__}"
         if neuron_layer and neuron_idx:
             title += f"(linked with N{neuron_layer}.{neuron_idx})"
 
