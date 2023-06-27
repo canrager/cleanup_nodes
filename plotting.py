@@ -18,7 +18,7 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
-from typing import Optional, Union
+from typing import Optional, Union, List
 from torch import Tensor
 
 import plotly.express as px
@@ -365,17 +365,24 @@ def single_head_full_resid_projection(
         return projections
 
 
-def ntensor_to_long(tensor: Union[Tensor, np.array]) -> pd.DataFrame:
+def ntensor_to_long(
+    tensor: Union[Tensor, np.array],
+    value_name: str = "values",
+    dim_names: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
     Converts an n-dimensional tensor to a long format dataframe.
     """
     df = pd.DataFrame()
-    df["values"] = tensor.cpu().numpy().flatten()
+    df[value_name] = tensor.cpu().numpy().flatten()
 
     for i, _ in enumerate(tensor.shape):
         pattern = np.repeat(np.arange(tensor.shape[i]), np.prod(tensor.shape[i+1:]))
         n_repeats = np.prod(tensor.shape[:i])
         df[f"dim{i}"] = np.tile(pattern, n_repeats)
+
+    if dim_names is not None:
+        df.columns = [value_name] + dim_names
     
     return df
 
