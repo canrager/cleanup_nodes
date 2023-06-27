@@ -18,7 +18,7 @@ import pandas as pd
 
 import einops
 from jaxtyping import Float
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 from torch import Tensor
 
 import plotly.express as px
@@ -271,9 +271,10 @@ def get_fig_head_to_selected_mlp_neuron(
     return fig
 
 
-def single_head_full_resid_projection(
+def single_head_full_resid_metric(
     model,
     prompts,
+    metric_function: Callable,
     writer_layer: int,
     writer_idx: int,
     neuron_layer: Optional[int] = None,
@@ -297,15 +298,15 @@ def single_head_full_resid_projection(
     # calc projections vectorized (is the projection function valid for this vectorized operation?)
     # [ n_resid = 2*n_layers, batch, pos ]
 
-    projections = t.zeros(
+    metric_values = t.zeros(
         size=(2 * model.cfg.n_layers + 1, len(prompts), model.cfg.n_ctx)
     )
 
     # add resid pre layer 0
     resid_hook_name = get_act_name("resid_pre", 0)
-    projections[0] = projection(
+    metric_values[0] = metric_function(
         writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-        cleanup_out=cache[resid_hook_name],
+        cleaner_out=cache[resid_hook_name],
     )
 
     # add resid mid and post for all layers
@@ -313,12 +314,12 @@ def single_head_full_resid_projection(
         for i, resid_stage in enumerate(resid_hook_names):
             resid_hook_name = get_act_name(resid_stage, layer)
 
-            projections[2 * layer + i + 1] = projection(
+            metric_values[2 * layer + i + 1] = metric_function(
                 writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-                cleanup_out=cache[resid_hook_name],
+                cleaner_out=cache[resid_hook_name],
             )
-    projections_full = projections.flatten()  # shape: [n_resid*batch*pos]
-    projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
+    metric_full = metric_values.flatten()  # shape: [n_resid*batch*pos]
+    metric_values = einops.reduce(metric_values, "n_resid batch pos -> n_resid", "mean")
 
     if return_fig:
         resid_labels = ["L0_resid_pre"]
@@ -337,7 +338,7 @@ def single_head_full_resid_projection(
             repeated_labels = np.repeat(resid_labels, len(prompts) * model.cfg.n_ctx)
             df = pd.DataFrame(
                 {
-                    "projection_value": projections_full.cpu().numpy(),
+                    "projection_value": metric_full.cpu().numpy(),
                     "labels": repeated_labels,
                 }
             )
@@ -348,7 +349,7 @@ def single_head_full_resid_projection(
                 title=title,
             )
         else: # line plot
-            d = {"projection_value": projections.cpu().numpy(), "labels": resid_labels}
+            d = {"projection_value": metric_values.cpu().numpy(), "labels": resid_labels}
             df = pd.DataFrame(d)
             fig = px.line(
                 df,
@@ -360,9 +361,9 @@ def single_head_full_resid_projection(
             fig.add_vline(x=neuron_layer * 2 + 1, line_dash="dash", line_color="black")
 
             
-        return projections, fig
+        return metric_values, fig
     else:
-        return projections
+        return metric_values
 
 
 def ntensor_to_long(tensor: Union[Tensor, np.array]) -> pd.DataFrame:
