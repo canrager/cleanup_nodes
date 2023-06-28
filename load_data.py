@@ -52,7 +52,7 @@ def get_token_counts(model, prompts_t_): # returns list of #occurences per token
 # prompts_t = get_prompts_t()
 # token_counts = get_token_counts(model, prompts_t)
 
-# filter out tokens that occur less than 0.1% than the total number of prompts
+# # filter out tokens that occur less than 0.1% than the total number of prompts
 # MIN_TOKEN_COUNT = N_TOTAL_PROMPTS // 1_000
 # tokens = torch.arange(model.cfg.d_vocab, device=device, dtype=torch.int32)
 # tokens = tokens[token_counts >= MIN_TOKEN_COUNT]
