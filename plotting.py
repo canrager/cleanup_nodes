@@ -306,7 +306,7 @@ def single_head_full_resid_projection(
     resid_hook_name = get_act_name("resid_pre", 0)
     projections[0] = projection(
         writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-        cleanup_out=cache[resid_hook_name],
+        cleaner_out=cache[resid_hook_name],
     )
 
     # add resid mid and post for all layers
@@ -316,7 +316,7 @@ def single_head_full_resid_projection(
 
             projections[2 * layer + i + 1] = proj_func(
                 writer_out=cache[writer_hook_name][:, :, writer_idx, :],
-                cleanup_out=cache[resid_hook_name],
+                cleaner_out=cache[resid_hook_name],
             )
     projections_full = projections.flatten()  # shape: [n_resid*batch*pos]
     projections = einops.reduce(projections, "n_resid batch pos -> n_resid", "mean")
