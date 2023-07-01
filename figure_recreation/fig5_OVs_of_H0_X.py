@@ -52,10 +52,10 @@ for head in range(model.cfg.n_heads):
     df = pd.concat([df, df_E, df_pos])
 
 #%%
-fig, ax = plt.subplots(4, 2, figsize=(10, 12), sharex=True)
+fig, ax = plt.subplots(2, 4, figsize=(12, 6), sharex=True)
 
 for head in range(model.cfg.n_heads):
-    row, col = divmod(head, 2)
+    row, col = divmod(head, 4)
 
     sns.kdeplot(
         data=df.query(f"head == {head}"),
@@ -65,10 +65,15 @@ for head in range(model.cfg.n_heads):
         fill=True,
         ax=ax[row, col],
     )
-    ax[row, col].set_title(f"Embedding @ W_OV of H{BLOCK}.{head}")
+    title_kwargs = dict(fontweight='bold') if head == 2 else {}
+    ax[row, col].set_title(f"H{BLOCK}.{head}", **title_kwargs)
     ax[row, col].set_xlim([-0.2, 4.2])
     ax[row, col].set_xlabel("Norm")
 
+fig.suptitle(
+    f"KDE Plot of Embedding @ W_OV for Each Head in Block 0\n"
+    f"KDEs of each embedding type are normalized to have unit area"
+)
 fig.tight_layout()
 
 #%%
