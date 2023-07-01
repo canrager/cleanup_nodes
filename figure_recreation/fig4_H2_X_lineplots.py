@@ -81,29 +81,29 @@ fig, ax = plt.subplots(2, 1, figsize=(12, 14), sharex=True)
 
 # Subplot 1
 sns.lineplot(
-    data=df_sum,
-    x="pos",
-    y="projection_ratio",
-    errorbar=("pi", 75),
-    ax=ax[0],
-)
-ax[0].axhline(0, ls="--", color="black", alpha=0.4)
-ax[0].set_title("Projection of sum(H2.X) onto H0.2 (error bars: q25 - q75)")
-ax[0].set_ylabel("Projection Ratio")
-
-# Subplot 2
-sns.lineplot(
     data=df.groupby(["head", "pos"]).mean().reset_index(),
     x="pos",
     y="projection_ratio",
     hue="head",
+    ax=ax[0],
+)
+ax[0].axhline(0, ls="--", color="black", alpha=0.4)
+ax[0].set_title("Projections of H2.X onto H0.2")
+ax[0].set_xlabel("Position")
+ax[0].set_ylabel("Projection Ratio")
+ax[0].legend(title="X")
+
+# Subplot 2
+sns.lineplot(
+    data=df_sum,
+    x="pos",
+    y="projection_ratio",
+    errorbar=("pi", 75),
     ax=ax[1],
 )
 ax[1].axhline(0, ls="--", color="black", alpha=0.4)
-ax[1].set_title("Projections of H2.X onto H0.2")
-ax[1].set_xlabel("Position")
+ax[1].set_title("Projection of sum(H2.X) onto H0.2 (error bars: q25 - q75)")
 ax[1].set_ylabel("Projection Ratio")
-ax[1].legend(title="X")
 
 fig.tight_layout()
 
