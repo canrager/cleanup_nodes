@@ -1,0 +1,27 @@
+name: cleanup
+channels:
+  - anaconda
+  - conda-forge
+  - defaults
+  - plotly
+  - pytorch
+  - nvidia
+
+dependencies:
+  - python
+  - datasets
+  - einops
+  - iprogress  # for tqdm
+  - ipykernel
+  - jaxtyping
+  - nbformat>=4.2.0  # for plotly
+  - numpy
+  - pandas
+  - plotly>=5.15
+  - pytorch
+  - seaborn
+  - tqdm
+  - pip
+  - pip:
+    - transformer-lens
+    - git+https://github.com/callummcdougall/CircuitsVis.git#subdirectory=python
