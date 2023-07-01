@@ -65,7 +65,7 @@ for head in range(model.cfg.n_heads):
         fill=True,
         ax=ax[row, col],
     )
-    ax[row, col].set_title(f"Embedding @ H{BLOCK}.{head} @ W_OV")
+    ax[row, col].set_title(f"Embedding @ W_OV of H{BLOCK}.{head}")
     ax[row, col].set_xlim([-0.2, 4.2])
     ax[row, col].set_xlabel("Norm")
 
