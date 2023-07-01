@@ -1,15 +1,15 @@
-# datasets
-# einops
-# iprogress  # for tqdm
-# ipykernel
-# jaxtyping
-# nbformat>=4.2.0  # for plotly
-# numpy
-# pandas
+datasets
+einops
+iprogress  # for tqdm
+ipykernel
+jaxtyping
+nbformat>=4.2.0  # for plotly
+numpy
+pandas
 plotly
-# pytorch
-# seaborn
-# tqdm
-# pip
-# transformer-lens
-# git+https://github.com/callummcdougall/CircuitsVis.git#subdirectory=python
+pytorch
+seaborn
+tqdm
+pip
+transformer-lens
+git+https://github.com/callummcdougall/CircuitsVis.git#subdirectory=python
