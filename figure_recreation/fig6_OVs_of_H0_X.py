@@ -14,7 +14,7 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-FIG_FILEPATH = "figs/fig5_OVs_of_H0_X.jpg"
+FIG_FILEPATH = "figs/fig6_OVs_of_H0_X.jpg"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
@@ -69,6 +69,8 @@ for head in range(model.cfg.n_heads):
     ax[row, col].set_title(f"H{BLOCK}.{head}", **title_kwargs)
     ax[row, col].set_xlim([-0.2, 4.2])
     ax[row, col].set_xlabel("Norm")
+    if not (row == 0 and col == 0):
+        ax[row, col].get_legend().remove()
 
 fig.suptitle(
     f"KDE Plot of Embedding @ W_OV for Each Head in Block 0\n"
