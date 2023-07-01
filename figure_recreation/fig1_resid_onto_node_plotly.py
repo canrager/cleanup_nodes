@@ -195,6 +195,7 @@ for i in range(model.cfg.n_layers):
     title = (
         f"Various residual stream locations, projected onto the outputs of "
         f"nodes in layer {i}"
+        f"Averaged across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})"
     )
 
     shapes = []
@@ -253,3 +254,4 @@ main_fig["layout"]["sliders"][0]["pad"] = dict(t=120)
 #%%
 # Write the figure to file
 main_fig.write_html(FIG_FILEPATH)
+print("Saved figure to file: ", FIG_FILEPATH)
