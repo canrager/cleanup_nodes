@@ -11,15 +11,16 @@ dependencies:
   - python
   - datasets
   - einops
-  - iprogress  # for tqdm
   - ipykernel
+  - ipywidgets
   - jaxtyping
+  - jupyter
   - nbformat>=4.2.0  # for plotly
   - numpy
   - pandas
   - plotly>=5.15
   - pytorch
-  - seaborn
+  - seaborn>=0.12.2
   - tqdm
   - pip
   - pip:
