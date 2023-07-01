@@ -3,6 +3,7 @@ channels:
   - anaconda
   - conda-forge
   - defaults
+  - plotly
   - pytorch
   - nvidia
 
@@ -16,7 +17,7 @@ dependencies:
   - nbformat>=4.2.0  # for plotly
   - numpy
   - pandas
-  - plotly
+  - plotly>=5.15
   - pytorch
   - seaborn
   - tqdm
