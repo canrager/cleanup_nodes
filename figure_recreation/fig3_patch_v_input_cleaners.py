@@ -28,8 +28,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 1
-N_CODE_PROMPTS = 0
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_A_FILEPATH = "figs/fig3a_patch_v_input_resid_lineplot.jpg"
 FIG_B_FILEPATH = "figs/fig3b_patch_v_input_head_barplot.jpg"
 

@@ -24,8 +24,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 2
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 WRITER_NAME = "H0.2"
 FIG_FILEPATH = "figs/fig4_H2_X_onto_H0_2_lineplots.jpg"
 

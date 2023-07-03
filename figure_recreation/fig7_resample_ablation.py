@@ -20,6 +20,8 @@ from torch import Tensor
 from jaxtyping import Float, Int, Bool
 from typing import Callable, Optional
 from functools import partial
+from tqdm.auto import tqdm
+from itertools import product
 
 from transformer_lens import HookedTransformer, ActivationCache
 from transformer_lens.utils import get_act_name
@@ -33,14 +35,20 @@ from load_data import (
     get_prompts_t,
 )
 
-FIG_FILEPATH = "figs/fig7_resample_ablation.html"
+N_TEXT_PROMPTS = 24
+N_CODE_PROMPTS = 6
+FIG_FILEPATH = "figs/fig7_resample_ablation.jpg"
 
 #%% Setup model & load data
 model = HookedTransformer.from_pretrained('gelu-4l')
 model.cfg.use_attn_result = True
 model.to(device)
 
-prompts_t = get_prompts_t()
+# prompts_t = get_prompts_t()
+prompts_t = get_prompts_t(
+    n_text_prompts=N_TEXT_PROMPTS,
+    n_code_prompts=N_CODE_PROMPTS,
+).to(device)
 
 
 # %% resample ablation
@@ -53,28 +61,33 @@ def resample_ablation(activation, hook, head):
     return activation
 
 # %% calculate loss change for each head
-BATCH_SIZE = 5
+BATCH_SIZE = N_TEXT_PROMPTS + N_CODE_PROMPTS
+# BATCH_SIZE = 5
 
 # Compute original loss
 logits = model(prompts_t[:BATCH_SIZE, :], return_type="logits")
 original_losses = model.loss_fn(logits=logits, tokens=prompts_t[:BATCH_SIZE, :], per_token=True)
-del logits
-gc.collect()
+# del logits
+# gc.collect()
 
 ablated_loss_diff_matrix = torch.zeros((model.cfg.n_layers, model.cfg.n_heads, BATCH_SIZE, model.cfg.n_ctx-1))
 
-for layer in range(model.cfg.n_layers):
-    for head in range(model.cfg.n_heads):
-        ablated_logits = model.run_with_hooks(
-            prompts_t[:BATCH_SIZE], 
-            return_type="logits", 
-            fwd_hooks=[(get_act_name('result', layer), partial(resample_ablation, head=head))]
-        )
-        losses_per_head = model.loss_fn(logits=ablated_logits, tokens=prompts_t[:BATCH_SIZE], per_token=True)
-        del ablated_logits
-        gc.collect()
 
-        ablated_loss_diff_matrix[layer, head] = losses_per_head - original_losses
+progress_bar = tqdm(
+    product(range(model.cfg.n_layers), range(model.cfg.n_heads)),
+    total=model.cfg.n_layers * model.cfg.n_heads,
+)
+for layer, head in progress_bar:
+    ablated_logits = model.run_with_hooks(
+        prompts_t[:BATCH_SIZE], 
+        return_type="logits", 
+        fwd_hooks=[(get_act_name('result', layer), partial(resample_ablation, head=head))]
+    )
+    losses_per_head = model.loss_fn(logits=ablated_logits, tokens=prompts_t[:BATCH_SIZE], per_token=True)
+    # del ablated_logits
+    # gc.collect()
+
+    ablated_loss_diff_matrix[layer, head] = losses_per_head - original_losses
 
 print(original_losses.mean(dim=(-1, -2)))
 ori_loss = original_losses.mean(dim=(-1, -2)).item()
@@ -88,5 +101,6 @@ fig = px.imshow(
 
 #%%
 # Write the figure to file
-fig.write_html(FIG_FILEPATH)
+fig.write_image(FIG_FILEPATH)  # requires kaleido installed
 print("Saved figure to file: ", FIG_FILEPATH)
+# %%

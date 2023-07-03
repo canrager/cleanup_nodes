@@ -33,8 +33,8 @@ FIG_B_FILEPATH = "figs/fig5b_attn_pattern_H0_2.jpg"
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
 MODEL_NAME = "gelu-4l"
 
-N_TEXT_PROMPTS = 2
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 
 
 #%%
@@ -63,25 +63,16 @@ model.cfg.use_attn_result = True
 
 # ------------------ ATTENTION PATTERN HEATMAP PLOTS ------------------------ #
 #%%
-prompts_text = [
-    "argaera oaejopirja oaijgro sijaosaig oiargoas ijsori gaoirs",
-    "aergp aergaRAG apiej epira ejoerigajer iaeo joaeirg oijear",
-    "otaijpsd7g piaujr[oeaim [oaia[ oia oiu pgaoeirao ih i]]]",
-    "argaera oaejopirja oaijgro sijaosaig oiargoas ijsori gaoirs",
-    "aergp aergaRAG apiej epira ejoerigajer iaeo joaeirg oijear",
-    "argaera oaejopirja oaijgro sijaosaig oiargoas ijsori gaoirs",
-    "aergp aergaRAG apiej epira ejoerigajer iaeo joaeirg oijear",
-    "otaijpsd7g piaujr[oeaim [oaia[ oia oiu pgaoeirao ih i]]]",
-]
+prompts = get_prompts_t(
+    n_text_prompts=N_TEXT_PROMPTS,
+    n_code_prompts=N_CODE_PROMPTS,
+).to(device)
 
 n_tokens = 20
-prompts_rand = torch.tensor(
-    model.tokenizer(prompts_text, padding=True)["input_ids"],
-    device=device,
-)[:, :n_tokens]
 
 _, cache = model.run_with_cache(
-    prompts_rand,
+    prompts[:8, :n_tokens],
+    # prompts_rand,
     names_filter=lambda name: "blocks.0.attn.hook_pattern" in name,
     device=device,
 )
@@ -119,13 +110,6 @@ fig_a.savefig(FIG_A_FILEPATH, bbox_inches="tight")
 print("Saved figure to file: ", FIG_A_FILEPATH)
 
 # -------------------- ATTENTION PATTERN LINE PLOTS ------------------------- #
-
-#%%
-prompts = get_prompts_t(
-    n_text_prompts=N_TEXT_PROMPTS,
-    n_code_prompts=N_CODE_PROMPTS,
-).to(device)
-
 #%%
 _, cache = model.run_with_cache(
     prompts,

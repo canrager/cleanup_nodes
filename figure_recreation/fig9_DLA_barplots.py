@@ -32,8 +32,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 80
-N_CODE_PROMPTS = 20
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_FILEPATH = "figs/fig9_DLA_barplots.jpg"
 
 # Transformer Lens model names:
@@ -42,7 +42,10 @@ MODEL_NAME = "gelu-4l"
 
 
 #%%
-prompts = get_prompts_t().to(device)
+prompts = get_prompts_t(
+    n_text_prompts=N_TEXT_PROMPTS,
+    n_code_prompts=N_CODE_PROMPTS,
+).to(device)
 
 # Throws a warning if there is a non-unique prompt
 if not (torch.unique(prompts, dim=0).shape == prompts.shape):
