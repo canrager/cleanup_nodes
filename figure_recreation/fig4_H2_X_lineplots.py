@@ -84,6 +84,7 @@ sns.lineplot(
     data=df.groupby(["head", "pos"]).mean().reset_index(),
     x="pos",
     y="projection_ratio",
+    estimator="median",
     hue="head",
     ax=ax[0],
 )
@@ -98,6 +99,7 @@ sns.lineplot(
     data=df_sum,
     x="pos",
     y="projection_ratio",
+    estimator="median",
     errorbar=("pi", 75),
     ax=ax[1],
 )

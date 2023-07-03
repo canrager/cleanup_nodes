@@ -156,6 +156,7 @@ sns.lineplot(
     data=df_bos,
     x="pos",
     y="attn_prob",
+    estimator="median",
     errorbar=("pi", 75),
     ax=ax_b[0],
 )
@@ -171,6 +172,7 @@ sns.lineplot(
     data=df_nonbos.query("nonbos_pos <= 2000"),
     x="nonbos_pos",
     y="attn_prob",
+    estimator="median",
     errorbar=("pi", 75),
     ax=ax_b[1],
 )

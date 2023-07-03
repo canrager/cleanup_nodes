@@ -133,6 +133,7 @@ sns.barplot(
     data=df.query("node_name != @WRITER_NAME"),
     x="node_name",
     y="projection_ratio",
+    estimator="median",
     errorbar=("pi", 75),
     order=node_names_without,
     ax=ax,

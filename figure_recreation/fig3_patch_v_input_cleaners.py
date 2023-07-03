@@ -167,6 +167,7 @@ sns.lineplot(
     data=df_resid,
     x="resid",
     y="projection_ratio",
+    estimator="median",
     hue="run",
     errorbar=("pi", 75),
     ax=ax_a,

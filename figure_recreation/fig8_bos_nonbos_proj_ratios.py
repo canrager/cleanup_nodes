@@ -164,6 +164,7 @@ sns.lineplot(
     data=df_bos.query("pos != 1023").groupby(["batch", "pos"]).sum().reset_index(),
     x="pos",
     y="projection_ratio",
+    estimator="median",
     errorbar=("pi", 75),
     ax=ax[0],
 )
@@ -176,6 +177,7 @@ sns.lineplot(
     data=df_nonbos.query("pos != 1023").groupby(["batch", "pos"]).sum().reset_index(),
     x="pos",
     y="projection_ratio",
+    estimator="median",
     errorbar=("pi", 75),
     ax=ax[1],
 )

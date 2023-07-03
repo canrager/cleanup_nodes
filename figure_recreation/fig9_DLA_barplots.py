@@ -174,6 +174,7 @@ for i, example in enumerate(examples):
         data=df[df['example'] == i],
         x="type",
         y="prob_diff",
+        estimator="median",
         errorbar=("pi", 75),
         ax=ax[i],
     )
