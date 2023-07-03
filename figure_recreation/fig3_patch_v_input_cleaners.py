@@ -18,9 +18,8 @@ from load_data import get_prompts_t
 from plotting import ntensor_to_long
 from jamesd_utils import projection_ratio
 
-from plotly.graph_objs.layout._shape import Shape
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import seaborn as sns
 
 
@@ -31,7 +30,8 @@ device = "cpu"
 
 N_TEXT_PROMPTS = 1
 N_CODE_PROMPTS = 0
-FIG_FILEPATH = "figs/fig3_patch_v_input_cleaners.jpg"
+FIG_A_FILEPATH = "figs/fig3a_patch_v_input_resid_lineplot.jpg"
+FIG_B_FILEPATH = "figs/fig3b_patch_v_input_head_barplot.jpg"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
@@ -130,14 +130,6 @@ df_head = ntensor_to_long(
 )
 
 #%%
-sns.barplot(
-    data=df_head,
-    x="head",
-    y="projection_ratio",
-    errorbar=("pi", 75),
-)
-
-#%%
 orig_resids_onto_writer_prs = projection_ratio(
     orig_resids,
     einops.rearrange(orig_H0_2, "batch pos head d_model -> head batch pos d_model"),
@@ -164,17 +156,72 @@ df_patched_resid["run"] = "patched"
 df_resid = pd.concat([df_orig_resid, df_patched_resid], axis=0)
 
 #%%
+resid_names_plot = ["resid_pre0"]
+for i in range(model.cfg.n_layers):
+    resid_names_plot.append(f"resid_mid{i}")
+    resid_names_plot.append(f"resid_post{i}")
+#%%
+fig_a, ax_a = plt.subplots(figsize=(12, 6))
+
 sns.lineplot(
     data=df_resid,
     x="resid",
     y="projection_ratio",
     hue="run",
     errorbar=("pi", 75),
+    ax=ax_a,
 )
+ax_a.set_title("Projection of Residual Stream Locations onto H0.2")
+ax_a.set_ylabel("Projection Ratio")
+ax_a.set_xlabel("")
+ax_a.set_xticks(
+    ticks=range(len(resid_names_plot)),
+    labels=resid_names_plot,
+    rotation=-20,
+)
+ax_a.legend(
+    title="Run",
+    labels=["Original", "Patched"],
+    handles=[
+        mlines.Line2D([0], [0], color="C0", lw=2),
+        mlines.Line2D([0], [0], color="C1", lw=2),
+    ]
+);
 
 #%%
+# Save figure
+fig_a.savefig(FIG_A_FILEPATH, bbox_inches="tight")
+print(f"Saved figure to {FIG_A_FILEPATH}")
 
-#import psutil; psutil.virtual_memory()
+#%%
+fig_b, ax_b = plt.subplots(figsize=(12, 6))
+
+sns.barplot(
+    data=df_head,
+    x="head",
+    y="projection_ratio",
+    estimator="median",
+    errorbar=("pi", 75),
+    ax=ax_b,
+)
+ax_b.set_title(
+    "Projection of H2.X onto H0.2\n"
+    "Error bars: q25 - q75"
+)
+ax_b.set_ylabel("Projection Ratio")
+ax_b.set_xlabel("")
+ax_b.set_xticks(
+    ticks=range(model.cfg.n_heads),
+    labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+);
+
+#%%
+fig_b.savefig(FIG_B_FILEPATH, bbox_inches="tight")
+print(f"Saved figure to {FIG_B_FILEPATH}")
+
+
+#%%
+# import psutil; psutil.virtual_memory()
 
 """
 # We think that hook_v_input has not been layer normed yet
