@@ -170,7 +170,11 @@ sns.lineplot(
 )
 ax[0].axhline(0, color="black", linestyle="--")
 ax[0].set_ylabel("Projection Ratio")
-ax[0].set_title("Projection of sum(H2.X) onto H0.2 BOS only (error bars: q25 - q75)")
+ax[0].set_title(
+    f"Projection of sum(H2.X) onto H0.2 BOS only\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
+)
 
 # Subplot 2: non-BOS
 sns.lineplot(
@@ -184,7 +188,11 @@ sns.lineplot(
 ax[1].axhline(0, color="black", linestyle="--")
 ax[1].set_xlabel("Position")
 ax[1].set_ylabel("Projection Ratio")
-ax[1].set_title("Projection of sum(H2.X) onto H0.2 non-BOS only (error bars: q25 - q75)")
+ax[1].set_title(
+    f"Projection of sum(H2.X) onto H0.2 non-BOS only\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
+)
 
 fig.tight_layout()
 

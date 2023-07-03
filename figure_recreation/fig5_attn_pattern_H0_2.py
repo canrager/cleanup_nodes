@@ -74,10 +74,11 @@ prompts_text = [
     "otaijpsd7g piaujr[oeaim [oaia[ oia oiu pgaoeirao ih i]]]",
 ]
 
+n_tokens = 20
 prompts_rand = torch.tensor(
     model.tokenizer(prompts_text, padding=True)["input_ids"],
     device=device,
-)[:, :20]
+)[:, :n_tokens]
 
 _, cache = model.run_with_cache(
     prompts_rand,
@@ -107,6 +108,9 @@ for i in range(attn_patterns.shape[0]):
     ax_a[row, col].set_xticks([])
     ax_a[row, col].set_yticks([])
 
+fig_a.suptitle(
+    f"Attention Patterns of H0.2 from Randomly Sampled Prompts (First {n_tokens} Positions)"
+)
 fig_a.tight_layout()
 
 #%%
@@ -157,14 +161,14 @@ sns.lineplot(
     x="pos",
     y="attn_prob",
     estimator="median",
-    errorbar=("pi", 75),
+    errorbar=("pi", 100),
     ax=ax_b[0],
 )
 ax_b[0].set_xlabel("Query Position of BOS")
 ax_b[0].set_ylabel("Attention Probability")
 ax_b[0].set_title(
-    f"Attention Probabilities in H0.2\n"
-    f"Batch size: {prompts.shape[0]}, error bars: q25-q75"
+    f"Attention Probabilities in H0.2 of the BOS Column\n"
+    f"Batch size: {prompts.shape[0]}, error bars: min-max"
 )
 
 # Subplot 2
@@ -173,14 +177,14 @@ sns.lineplot(
     x="nonbos_pos",
     y="attn_prob",
     estimator="median",
-    errorbar=("pi", 75),
+    errorbar=("pi", 100),
     ax=ax_b[1],
 )
 ax_b[1].set_xlabel("Position of Flattened Lower Triangular without BOS Column")
 ax_b[1].set_ylabel("Attention Probability")
 ax_b[1].set_title(
     f"Attention Probabilities when Attending to non-BOS in H0.2\n"
-    f"Batch size: {prompts.shape[0]}, error bars: q25-q75"
+    f"Batch size: {prompts.shape[0]}, error bars: min-max"
 )
 
 fig_b.tight_layout()

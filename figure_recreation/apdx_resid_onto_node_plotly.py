@@ -30,7 +30,7 @@ device = "cpu"
 
 N_TEXT_PROMPTS = 2
 N_CODE_PROMPTS = 1
-FIG_FILEPATH = "figs/fig1_resid_onto_node_plotly.html"
+FIG_FILEPATH = "figs/apdx_resid_onto_node_plotly.html"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127

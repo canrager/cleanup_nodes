@@ -172,7 +172,11 @@ sns.lineplot(
     errorbar=("pi", 75),
     ax=ax_a,
 )
-ax_a.set_title("Projection of Residual Stream Locations onto H0.2")
+ax_a.set_title(
+    f"Projection of Residual Stream onto H0.2 with Patching (H0.2 subtracted from V_input)\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
+)
 ax_a.set_ylabel("Projection Ratio")
 ax_a.set_xlabel("")
 ax_a.set_xticks(
@@ -206,8 +210,9 @@ sns.barplot(
     ax=ax_b,
 )
 ax_b.set_title(
-    "Projection of H2.X onto H0.2\n"
-    "Error bars: q25 - q75"
+    f"Projection of H2.X onto H0.2 with Patching (H0.2 subtracted from V_input)\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
 )
 ax_b.set_ylabel("Projection Ratio")
 ax_b.set_xlabel("")

@@ -89,10 +89,13 @@ sns.lineplot(
     ax=ax[0],
 )
 ax[0].axhline(0, ls="--", color="black", alpha=0.4)
-ax[0].set_title("Projections of H2.X onto H0.2")
+ax[0].set_title(
+    f"Projections of H2.X onto H0.2\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+)
 ax[0].set_xlabel("Position")
 ax[0].set_ylabel("Projection Ratio")
-ax[0].legend(title="X")
+ax[0].legend(title="Head")
 
 # Subplot 2
 sns.lineplot(
@@ -104,7 +107,11 @@ sns.lineplot(
     ax=ax[1],
 )
 ax[1].axhline(0, ls="--", color="black", alpha=0.4)
-ax[1].set_title("Projection of sum(H2.X) onto H0.2 (error bars: q25 - q75)")
+ax[1].set_title(
+    f"Projection of sum(H2.X) onto H0.2\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
+)
 ax[1].set_ylabel("Projection Ratio")
 
 fig.tight_layout()

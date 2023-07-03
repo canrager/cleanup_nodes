@@ -66,7 +66,9 @@ examples = [
 ]
 
 #%%
+n_prompts = N_TEXT_PROMPTS + N_CODE_PROMPTS
 prob_diffs = []
+
 for example in examples:
     text = example['text']
     answer = example['answer']
@@ -75,7 +77,6 @@ for example in examples:
     ori_tokens = model.to_tokens(text)
     answer_token_id = model.to_tokens(answer, prepend_bos=False)[0][0].item()
 
-    n_prompts = N_TEXT_PROMPTS + N_CODE_PROMPTS
     for random_prompt_idx in range(n_prompts):
         corrupted_tokens = prompts[random_prompt_idx:random_prompt_idx+1, :ori_tokens.shape[-1]]
 
@@ -180,7 +181,7 @@ for i, example in enumerate(examples):
     )
     ax[i].set_title(
         f"Prompt {i+1}\n"
-        f"Original Probabilty: {orig_probs[i]:.2f}"
+        f'Original Probabilty: {orig_probs[i]:.2f}'
     )
     ax[i].set_xlabel("")
     if i == 0:
@@ -188,6 +189,13 @@ for i, example in enumerate(examples):
     else:
         ax[i].set_ylabel("")
     ax[i].set_xticklabels(["Resample Ablation", "DLA"])
+
+fig.suptitle(
+    f"Comparison of Contributions to Correct Token Probabiity\n"
+    f"Resample Ablation vs. DLA applied to H0.2\n"
+    f"Ablation done with {n_prompts} random prompts, applied to only the last position\n"
+    f"Error bars: q25 - q75"
+)
 fig.tight_layout()
 
 #%%

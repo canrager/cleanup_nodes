@@ -107,11 +107,11 @@ torch.Size([36, 100, 1024, 512])
 torch.Size([1, 100, 1024, 512])
 
 # Calculate reinforcement ratios off all nodes projected onto the writer node
-reinf_ratios = projection_ratio(all_nodes, writer_node)  # shape: (resid node batch pos)
+proj_ratios = projection_ratio(all_nodes, writer_node)  # shape: (resid node batch pos)
 
 # Get RRs into a long format df
 df = ntensor_to_long(
-    reinf_ratios,
+    proj_ratios,
     value_name="projection_ratio",
     dim_names=["node", "batch", "pos"],
 )
@@ -149,8 +149,8 @@ for tick in ax.get_xticklabels():
 
 ax.set_title(
     f"Projections Ratios of All Nodes (except {WRITER_NAME}) Projected onto {WRITER_NAME}\n"
-    f"Mean across batch (n={reinf_ratios.shape[1]}) and position (n={reinf_ratios.shape[2]})\n"
-    f"Error bar: q25 - q75"
+    f"Median across batch (n={proj_ratios.shape[1]}) and position (n={proj_ratios.shape[2]})\n"
+    f"Error bars: q25 - q75"
 )
 ax.set_xlabel("Node Name")
 ax.set_ylabel("Projection Ratio");
