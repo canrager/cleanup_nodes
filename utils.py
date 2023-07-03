@@ -42,6 +42,37 @@ def projection(
     )
     return dot_prod
 
+# from james_util
+def projection_ratio(
+    cleaner_vectors: Float[Tensor, "... d_model"],
+    writer_vectors: Float[Tensor, "... d_model"],
+) -> Float[Tensor, "..."]:
+    """
+    Works element-wise on the last dimension of the input tensors.
+
+    Interpretation: 
+    After you project `cleaner_vectors` onto the direction of
+    `writer_vectors`, the projection ratio is the ratio of length of the
+    projection to the length of `writer_vectors`.
+
+    A projection ratio of -1 means that the projection is in the opposite
+    direction of `writer_vectors`, and has the same L2 norm.
+    
+    Mathematically:
+    projection_ratio(A, B) = (A⋅B) / ||B||^2
+        OR
+    projection_ratio(A, B) = cos_sim(A, B) * ||A|| / ||B||
+
+
+    Args:
+        cleaner_vectors: a tensor of vectors that will be projected
+        writer_vectors: a tensor of vectors that will be projected onto
+    """
+    return einops.einsum(
+        cleaner_vectors,
+        writer_vectors / writer_vectors.norm(dim=-1, keepdim=True).pow(2),
+        "... d_model, ... d_model -> ...",
+    )
 
 def reinforcement_ratio(
     writer_out: Float[Tensor, "batch pos dmodel"],
