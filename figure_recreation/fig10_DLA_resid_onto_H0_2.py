@@ -47,7 +47,7 @@ examples = [
 ]
 
 # %%
-def plot_H02_to_resid(prompt, model):
+def plot_H02_to_resid(prompt, answer, model):
     logits, sample_cache = model.run_with_cache(prompt)
     next_token = logits.argmax(dim=-1)[..., -1]
     next_token = model.tokenizer.decode(next_token)
@@ -75,12 +75,12 @@ def plot_H02_to_resid(prompt, model):
     return px.line(
         y=resid_onto_attn_out, 
         x=xticks, 
-        title=f'Project various residual stream location onto H0.2 at the last position<br>Prompt: "{prompt}"',
+        title=f'Project various residual stream location onto H0.2 at the last position<br>Prompt: "{prompt}", Next token: "{answer}"',
         labels={'x': 'residual layer', 'y': 'projection ratio'}
     )
 
 for i, fig_path in enumerate(FIGS_FILEPATH):
-    fig = plot_H02_to_resid(examples[i]['text'], model)
+    fig = plot_H02_to_resid(examples[i]['text'], examples[i]['answer'], model)
     fig.write_image(fig_path)
 
 # %%
