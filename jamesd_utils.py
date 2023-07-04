@@ -1,6 +1,11 @@
+import torch
 import einops
+
+from typing import List, Tuple, Optional
 from jaxtyping import Float
 from torch import Tensor
+
+from tqdm.auto import tqdm, trange
 
 
 def projection_ratio(
@@ -110,3 +115,73 @@ def projection_value_cartesian(
         writer_vectors / writer_vectors.norm(dim=-1, keepdim=True),
         "dim0_arg0 ... d_model, dim0_arg1 ... d_model -> dim0_arg0 dim0_arg1 ...",
     )
+
+
+def scale_embeddings(
+    model,
+    token_ids_to_scale: Optional[List[int]],
+    device="cpu",
+) -> Tuple[Float[Tensor, "d_vocab d_model"], Float[Tensor, "n_ctx d_model"]]:
+    """
+    Scales the token and positional embeddings of a model.
+    
+    Taken from Jett's notebook:
+    https://github.com/jettjaniak/research/blob/70f1a09910953a6c909b876ad60bb5c350ac9cfc/014-p-to-t-tok-stats.ipynb
+
+    Args:
+        model: a HookedTransformer from Transformer Lens
+        token_ids_to_scale: a list of token IDs to apply scaling to. If `None`,
+            then all token IDs are scaled.
+    
+    Returns:
+        A tuple of (scaled_token_embeddings, scaled_positional_embeddings)
+    """
+    W_E = model.W_E.data  # token embeddings, (d_vocab, d_model)
+    W_pos = model.W_pos.data # positional embeddings, (n_ctx, d_model)
+
+    if token_ids_to_scale is None:
+        token_ids_to_scale = list(range(model.W_E.shape[0]))
+
+    def decompose_resid0():
+        b_T_ = W_E[token_ids_to_scale].mean(dim=0, keepdim=True)
+        b_P_ = W_pos[1:].mean(dim=0, keepdim=True)
+        b_TP_ = b_T_ + b_P_
+        T_ = torch.zeros_like(W_E)
+        T_[token_ids_to_scale] = W_E[token_ids_to_scale] - b_T_
+        P_ = torch.zeros_like(W_pos)
+        P_[1:] = W_pos[1:] - b_P_
+        return T_, P_, b_TP_
+
+    def layer_norm_scale(x):
+        x2 = x.pow(2)
+        x2mean = x2.mean(-1, keepdim=True)
+        x2mean_eps = x2mean + model.cfg.eps
+        return x2mean_eps.sqrt()
+
+    def get_T_ln_scale(T_, P_, b_TP_):
+        print("computing T LN scaling")
+        T_ln_scale = torch.ones(T_.shape[0], 1).to(device)
+        for t in tqdm(token_ids_to_scale):
+            combined_embed = (T_[t:t+1] + P_[1:] + b_TP_)
+            combined_embeds_norms = layer_norm_scale(combined_embed)
+            T_ln_scale[t] = combined_embeds_norms.median()
+        return T_ln_scale
+
+    def get_P_ln_scale(T_, P_, b_TP_):
+        print("computing P LN scaling")
+        P_ln_scale = torch.ones(model.cfg.n_ctx, 1).to(device)
+        for p in trange(1, model.cfg.n_ctx):
+            combined_embed = (P_[p:p+1] + T_[token_ids_to_scale] + b_TP_)
+            combined_embeds_norms = layer_norm_scale(combined_embed)
+            P_ln_scale[p] = combined_embeds_norms.median()
+        return P_ln_scale
+
+    T_, P_, b_TP_ = decompose_resid0()
+
+    T_ln_scale = get_T_ln_scale(T_, P_, b_TP_)
+    P_ln_scale = get_P_ln_scale(T_, P_, b_TP_)
+
+    scaled_token_embeddings = T_ / T_ln_scale
+    scaled_positional_embeddings = P_ / P_ln_scale
+
+    return scaled_token_embeddings, scaled_positional_embeddings
