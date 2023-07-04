@@ -87,7 +87,7 @@ orig_resids = torch.stack(
     dim=0,
 )  # shape: (resid, batch, pos, d_model)
 
-orig_ln_final_scale = cache["blocks.2.ln1.hook_scale"]
+orig_ln_scale = cache["blocks.2.ln1.hook_scale"]
 
 del orig_logits, cache
 gc.collect()
@@ -104,8 +104,7 @@ def hook_remove_H0_2(activations, hook):
 def hook_patch_ln_scale(scale, hook):
     if hook.name == "blocks.2.ln1.hook_scale":
         print("Did the ln_final scale hook!")
-        scale = orig_ln_final_scale
-    return scale
+        return orig_ln_scale
 
 # Add hooks and run with cache
 model.reset_hooks()

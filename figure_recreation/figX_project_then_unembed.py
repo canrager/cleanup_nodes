@@ -112,6 +112,17 @@ df = ntensor_to_long(
 )
 
 #%%
+# DLA without projection
+H0_2_normed = (H0_2 - H0_2.mean(dim=-1, keepdim=True)) / scale
+dla_without_proj = einops.einsum(
+    H0_2_normed[0, :,  -1, :],  # shape: (batch, d_model)
+    model.W_U,
+    "batch d_model, d_model d_vocab -> batch d_vocab",
+)
+dla_without_proj_probs = (orig_logits - dla_without_proj).softmax(dim=-1)[..., correct_token_id].flatten().cpu().numpy()
+prob_diff_wo_proj = (orig_prob - dla_without_proj_probs)[0]
+
+#%%
 fig, ax = plt.subplots()
 ax2 = ax.twinx()
 
@@ -123,10 +134,11 @@ sns.lineplot(
 )
 sns.lineplot(
     x=df.resid.unique(),
-    y=new_probs,
+    y=orig_prob - new_probs,
     color="C1",
     ax=ax2,
 )
 ax2.set_ylabel("softmax(logits-DLA)[t]")
+ax2.axhline(prob_diff_wo_proj, color="black", linestyle="--")
 
 # import psutil; psutil.virtual_memory()

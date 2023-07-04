@@ -40,10 +40,10 @@ model.cfg.use_attn_result = True
 # W_pos = model.W_pos  # (n_ctx, d_model)
 
 # Scaled embeddings
-# df_token_counts = pd.read_csv("../sanity_checks/counts_with_strings.csv")
-# token_ids_to_scale = df_token_counts.query("count >= @MIN_TOKEN_COUNT")["token_id"].tolist()
-# W_E, W_pos = scale_embeddings(model, token_ids_to_scale, device=device)
-W_E, W_pos = scale_embeddings(model, device=device)
+df_token_counts = pd.read_csv("../sanity_checks/counts_with_strings.csv")
+token_ids_to_scale = df_token_counts.query("count >= @MIN_TOKEN_COUNT")["token_id"].tolist()
+W_E, W_pos = scale_embeddings(model, token_ids_to_scale, device=device)
+W_E = W_E[token_ids_to_scale]  # Keep only scaled embeddings
 
 #%%
 W_OV = []
@@ -68,29 +68,41 @@ for head in range(model.cfg.n_heads):
     df = pd.concat([df, df_E, df_pos])
 
 #%%
-fig, ax = plt.subplots(2, 4, figsize=(12, 6), sharex=True)
+fig, ax = plt.subplots(2, 4, figsize=(12, 6))
 
-for head in range(model.cfg.n_heads):
+xlims = [
+    (-0.2, 5.2),
+    (-0.2, 4),
+    (-0.2, 18),
+    (-0.2, 5),
+    (-0.2, 6),
+    (-0.2, 5.2),
+    (-0.2, 5),
+    (-0.2, 5),
+]
+
+for xlim, head in zip(xlims, range(model.cfg.n_heads)):
     row, col = divmod(head, 4)
 
-    sns.kdeplot(
+    sns.histplot(
         data=df.query(f"head == {head}"),
         x="norm",
         hue="Embedding",
         common_norm=False,
-        fill=True,
+        stat="density",
         ax=ax[row, col],
     )
     title_kwargs = dict(fontweight='bold') if head == 2 else {}
     ax[row, col].set_title(f"H{BLOCK}.{head}", **title_kwargs)
-    ax[row, col].set_xlim([-0.2, 18.0])
+    ax[row, col].set_xlim(xlim)
     ax[row, col].set_xlabel("Norm")
     if not (row == 0 and col == 0):
         ax[row, col].get_legend().remove()
 
 fig.suptitle(
-    f"KDE Plot of Embedding @ W_OV for Each Head in Block 0\n"
-    f"KDEs of each embedding type are normalized to have unit area"
+    f"Histograms of norm(Embedding @ W_OV) for Each Head in Block 0\n"
+    f"Each embedding type's histogram is normalized to have unit area\n"
+    f"Embeddings for infrequent tokens are removed (n_tok_embeds={W_E.shape[0]}, n_pos_embeds={W_pos.shape[0]})"
 )
 fig.tight_layout()
 
