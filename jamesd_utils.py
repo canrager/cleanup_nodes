@@ -119,7 +119,7 @@ def projection_value_cartesian(
 
 def scale_embeddings(
     model,
-    token_ids_to_scale: Optional[List[int]],
+    token_ids_to_scale: Optional[List[int]] = None,
     device="cpu",
 ) -> Tuple[Float[Tensor, "d_vocab d_model"], Float[Tensor, "n_ctx d_model"]]:
     """
