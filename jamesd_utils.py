@@ -93,7 +93,7 @@ def projection_value(
     """
     Works element-wise on the last dimension of the input tensors.
 
-    Mathematically: cos_sim(A, B) = (A•B) / (||B||)
+    Mathematically: projection_value(A, B) = (A•B) / ||B||
     """
     return einops.einsum(
         cleaner_vectors,
