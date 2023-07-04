@@ -42,8 +42,8 @@ model.cfg.use_attn_result = True
 # Scaled embeddings
 # df_token_counts = pd.read_csv("../sanity_checks/counts_with_strings.csv")
 # token_ids_to_scale = df_token_counts.query("count >= @MIN_TOKEN_COUNT")["token_id"].tolist()
-W_E, W_pos = scale_embeddings(model, device=device)
 # W_E, W_pos = scale_embeddings(model, token_ids_to_scale, device=device)
+W_E, W_pos = scale_embeddings(model, device=device)
 
 #%%
 W_OV = []
