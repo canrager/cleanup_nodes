@@ -18,7 +18,6 @@ tokens = model.tokenizer(text, return_tensors="pt")["input_ids"].to(device)
 # %%
 _, cache = model.run_with_cache(tokens)
 
-
 # %%
 # Double check manual computing of post-layernorm final residual stream
 x = cache["blocks.3.hook_resid_post"]
