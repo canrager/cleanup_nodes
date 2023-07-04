@@ -28,8 +28,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 240
-N_CODE_PROMPTS = 60
+N_TEXT_PROMPTS = 2
+N_CODE_PROMPTS = 1
 FIG_A_FILEPATH = "figs/fig3a_patch_v_input_resid_lineplot.jpg"
 FIG_B_FILEPATH = "figs/fig3b_patch_v_input_head_barplot.jpg"
 
@@ -68,6 +68,7 @@ orig_logits, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
         "blocks.0.attn.hook_result" in name or
+        "blocks.2.ln1.hook_scale" in name or
         name in resid_names
     ),
     device=device,
@@ -75,29 +76,41 @@ orig_logits, cache = model.run_with_cache(
 # Select head 2 but keep the head dimension
 orig_H0_2 = cache["blocks.0.attn.hook_result"][:, :, 2:3, :]  # (batch, pos, 1, d_model)
 
-orig_loss = torch.nn.functional.cross_entropy(
-    einops.rearrange(orig_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
-    einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
-    reduction="none",
-)
+# orig_loss = torch.nn.functional.cross_entropy(
+#     einops.rearrange(orig_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
+#     einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
+#     reduction="none",
+# )
 
 orig_resids = torch.stack(
     [cache[name] for name in resid_names],
     dim=0,
 )  # shape: (resid, batch, pos, d_model)
 
+orig_ln_final_scale = cache["blocks.2.ln1.hook_scale"]
+
 del orig_logits, cache
 gc.collect()
 
 #%%
+# Remove H0.2 from the v_input to H2.X
 def hook_remove_H0_2(activations, hook):
     if hook.name == "blocks.2.hook_v_input":
-        print("Did the hook!")
+        print("Did the v_input hook!")
         activations = activations - orig_H0_2
     return activations
 
+# Use the original layernorm scale for H2.X
+def hook_patch_ln_scale(scale, hook):
+    if hook.name == "blocks.2.ln1.hook_scale":
+        print("Did the ln_final scale hook!")
+        scale = orig_ln_final_scale
+    return scale
+
+# Add hooks and run with cache
 model.reset_hooks()
 model.add_hook("blocks.2.hook_v_input", hook_remove_H0_2, level=1)
+model.add_hook("blocks.2.ln1.hook_scale", hook_patch_ln_scale, level=1)
 patched_logits, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
@@ -106,14 +119,16 @@ patched_logits, cache = model.run_with_cache(
     ),
     device=device,
 )
+model.reset_hooks()
 
-patched_loss = torch.nn.functional.cross_entropy(
-    einops.rearrange(patched_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
-    einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
-    reduction="none",
-)
+# patched_loss = torch.nn.functional.cross_entropy(
+#     einops.rearrange(patched_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
+#     einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
+#     reduction="none",
+# )
 
 patched_H2_X = cache["blocks.2.attn.hook_result"]
+
 patched_resids = torch.stack(
     [cache[name] for name in resid_names],
     dim=0,
@@ -226,10 +241,9 @@ fig_b.savefig(FIG_B_FILEPATH, bbox_inches="tight")
 print(f"Saved figure to {FIG_B_FILEPATH}")
 
 
-#%%
-# import psutil; psutil.virtual_memory()
-
 """
+# NOTE
+
 # We think that hook_v_input has not been layer normed yet
 
 # This shows that the norms are different
