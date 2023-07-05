@@ -65,6 +65,7 @@ _, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
         "blocks.0.attn.hook_result" in name or
+        "blocks.2.attn.hook_result" in name or
         name in resid_names
     ),
     device=device,
@@ -74,6 +75,13 @@ H0_2 = einops.rearrange(
     cache["blocks.0.attn.hook_result"][:, :, 2:3, :],
     "batch pos head d_model -> head batch pos d_model",
 )  # shape: (head, batch, pos, d_model)
+
+H2_X = einops.rearrange(
+    cache["blocks.2.attn.hook_result"],
+    "batch pos head d_model -> head batch pos d_model",
+)  # shape: (head, batch, pos, d_model)
+
+# Stack resids
 resids = torch.stack(
     [cache[name] for name in resid_names],
     dim=0,
@@ -105,15 +113,22 @@ df_wide[2].iloc[:, 1:].plot(legend=False, figsize=(10, 4), title="Batch 2 (c4), 
 
 #%%
 # Bin pos, and plot a resid line for each pos bin, for a given batch
-n_lines = 4
+n_lines = 24
 df["pos_group"] = pd.cut(df.pos, bins=n_lines)
 
-fig, ax = plt.subplots(figsize=(14, 8))
+for i in range(0, n_lines, 4):
+    filtered_df = (
+        df.query("batch == 1")
+        [df.pos_group.isin(df.pos_group.unique()[i:i+5])]
+    )
+    filtered_df["pos_group"] = filtered_df["pos_group"].astype(str)
 
-sns.lineplot(
-    data=df.query("batch == 1"),
-    x="resid",
-    y="projection_ratio",
-    hue="pos_group",
-    errorbar=("pi", 75)
-)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.lineplot(
+        data=filtered_df,
+        x="resid",
+        y="projection_ratio",
+        hue="pos_group",
+        errorbar=("pi", 75)
+    )
+    ax.set_ylim([-0.8, 1.3])
