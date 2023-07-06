@@ -35,8 +35,8 @@ torch.set_grad_enabled(False)
 device = "cpu"
 
 # Number of prompts to use for resample ablation
-N_TEXT_PROMPTS = 8
-N_CODE_PROMPTS = 2
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_FILEPATH = "figs/fig9_DLA_barplots.jpg"
 
 # Transformer Lens model names:
@@ -210,7 +210,7 @@ for i in range(len(examples)):
         data=df.query(f"example == {i}"),
         x="method",
         y="contribution",
-        errorbar=("pi", 99),
+        errorbar=("pi", 75),
         ax=ax[i]
     )
     ax[i].axhline(0, color="black", linestyle="--")
@@ -229,7 +229,8 @@ for i in range(len(examples)):
 fig.suptitle(
     f"Contribution of H0.2 to logit difference between correct and incorrect tokens,"
     f" according to DLA and resampling ablation\n"
-    f"Resample ablation is done with {N_TEXT_PROMPTS + N_CODE_PROMPTS} random prompts"
+    f"Resample ablation is done with {N_TEXT_PROMPTS + N_CODE_PROMPTS} random prompts\n"
+    f"Error bars: q25 - q75"
 )
 fig.tight_layout()
 

@@ -34,8 +34,8 @@ FIG_B_FILEPATH = "figs/fig5b_attn_pattern_H0_2.jpg"
 MODEL_NAME = "gelu-4l"
 N_TOKENS_FOR_HEATMAP = 20
 
-N_TEXT_PROMPTS = 7
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 
 
 #%%
