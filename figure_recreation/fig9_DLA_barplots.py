@@ -227,8 +227,9 @@ for i in range(len(examples)):
     )
 
 fig.suptitle(
-    "Contribution of H0.2 to logit difference between correct and incorrect tokens,"
-    " according to DLA and resampling ablation"
+    f"Contribution of H0.2 to logit difference between correct and incorrect tokens,"
+    f" according to DLA and resampling ablation\n"
+    f"Resample ablation is done with {N_TEXT_PROMPTS + N_CODE_PROMPTS} random prompts"
 )
 fig.tight_layout()
 
