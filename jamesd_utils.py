@@ -141,7 +141,7 @@ def get_logit_diff_function(
         logit_diff_bias = model.b_U[correct_token_id] - model.b_U[incorrect_token_id]
 
     def calc_logit_diff(
-        resid_final: Float[Tensor, "... d_model"]
+        resid_final: Float[Tensor, "... d_model"],
     ) -> Float[Tensor, "..."]:
         return resid_final @ logit_diff_direction + logit_diff_bias
 

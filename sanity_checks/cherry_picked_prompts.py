@@ -10,14 +10,14 @@ model = HookedTransformer.from_pretrained(MODEL_NAME, device="cpu")
 
 #%%
 examples = [
-    {'text': "It's in the shelf, either on the top or the", 'answer': ' bottom'},
-    {'text': "I went to university at Michigan", 'answer': ' State'},
-    {'text': "class MyClass:\n    def", 'answer': ' __'},
+    {'text': "It's in the shelf, either on the top or the", 'correct': ' bottom'},
+    {'text': "I went to university at Michigan", 'correct': ' State'},
+    {'text': "class MyClass:\n\tdef", 'correct': ' __'},
 ]
 
 #%%
 for example in examples:
     text = example['text']
-    answer = example['answer']
+    answer = example['correct']
     test_prompt(text, answer, model, prepend_space_to_answer=False)
     print("# ========================================================================= #\n")

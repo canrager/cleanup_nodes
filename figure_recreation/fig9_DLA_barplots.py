@@ -1,7 +1,8 @@
-#%%
+# %%
 # Gross code to allow for importing from parent directory
 import os, sys
 from pathlib import Path
+
 parent_path = str(Path(os.getcwd()).parent)
 if parent_path not in sys.path:
     sys.path.append(parent_path)
@@ -22,6 +23,7 @@ from torch import Tensor
 from transformer_lens import HookedTransformer
 from transformer_lens.utils import get_act_name
 from load_data import get_prompts_t
+from jamesd_utils import get_logit_diff_function
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -32,8 +34,9 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 240
-N_CODE_PROMPTS = 60
+# Number of prompts to use for resample ablation
+N_TEXT_PROMPTS = 8
+N_CODE_PROMPTS = 2
 FIG_FILEPATH = "figs/fig9_DLA_barplots.jpg"
 
 # Transformer Lens model names:
@@ -41,7 +44,7 @@ FIG_FILEPATH = "figs/fig9_DLA_barplots.jpg"
 MODEL_NAME = "gelu-4l"
 
 
-#%%
+# %%
 prompts = get_prompts_t(
     n_text_prompts=N_TEXT_PROMPTS,
     n_code_prompts=N_CODE_PROMPTS,
@@ -51,157 +54,185 @@ prompts = get_prompts_t(
 if not (torch.unique(prompts, dim=0).shape == prompts.shape):
     print("WARNING: at least 1 prompt is not unique")
 
-#%%
+# %%
 model = HookedTransformer.from_pretrained(MODEL_NAME, device=device)
 model.cfg.use_attn_result = True
 
-#%%
-def resample_ablation(activation, hook, corrupted_activation, head):
-    """activation: (batch, pos, head, dmodel)"""
-    activation[:, -1, head, :] = corrupted_activation[hook.name][:, -1, head, :]
-    return activation
-
-#%%
+# %%
 examples = [
-    {'text': "It's in the shelf, either on the top or the", 'answer': ' bottom'},
-    {'text': "I went to university at Michigan", 'answer': ' State'},
-    {'text': "class MyClass:\n\tdef", 'answer': ' __'},
+    {
+        "text": "It's in the shelf, either on the top or the",
+        "correct": " bottom",
+        "incorrect": " top",
+    },
+    {
+        "text": "I went to university at Michigan",
+        "correct": " State",
+        "incorrect": " University",
+    },
+    {
+        "text": "class MyClass:\n\tdef",
+        "correct": " __",
+        "incorrect": " get",
+    },
 ]
 
-#%%
-n_prompts = N_TEXT_PROMPTS + N_CODE_PROMPTS
-prob_diffs = []
 
+# %%
+def get_DLA_logit_diff_attn_head(example, model, layer, head):
+    """
+    Returns the logit difference between the correct and incorrect token, when
+    apply direct logit attribution (DLA) to an attention head.
+    """
+    token_ids = model.to_tokens(example["text"])
+    correct_token_id = model.to_single_token(example["correct"])
+    incorrect_token_id = model.to_single_token(example["incorrect"])
+
+    calc_logit_diff = get_logit_diff_function(
+        model,
+        correct_token_id,
+        incorrect_token_id,
+    )
+
+    attn_layer_name = get_act_name("result", layer)
+
+    _, cache = model.run_with_cache(
+        token_ids,
+        names_filter=lambda name: (
+            name == "ln_final.hook_scale" or name == attn_layer_name
+        ),
+    )
+
+    # Take only the final position
+    attn_head_out = cache[attn_layer_name][0, -1, head, :]  # (dmodel)
+    scale = cache["ln_final.hook_scale"][0, -1]
+
+    # Apply final layernorm to the attn head output
+    attn_head_out_normed = (
+        attn_head_out - attn_head_out.mean(dim=-1, keepdim=True) / scale
+    )
+
+    return calc_logit_diff(attn_head_out_normed)
+
+
+# %%
+def get_resample_ablation_logit_diff_attn_head(example, model, layer, head):
+    token_ids = model.to_tokens(example["text"])
+    correct_token_id = model.to_single_token(example["correct"])
+    incorrect_token_id = model.to_single_token(example["incorrect"])
+
+    attn_layer_name = get_act_name("result", layer)
+
+    # Setup resampling prompts to have the same shape as original prompt
+    resampling_prompts = prompts[:, : token_ids.shape[-1]]
+
+    # Collect corrupted activations from resampling prompts
+    _, corrupted_cache = model.run_with_cache(
+        resampling_prompts,
+        names_filter=lambda name: name == attn_layer_name,
+    )
+    corrupted_activations = corrupted_cache[attn_layer_name]
+
+    # Define hook function for patching in corrupted activations
+    def resample_ablation_hook_fnc(activations, hook):
+        # Patch only the last pos for the given head
+        activations[:, -1, head, :] = corrupted_activations[:, -1, head, :]
+        return activations
+
+    # Repeat the original prompt to match the number of resampling prompts
+    repeated_token_ids = einops.repeat(
+        token_ids, "batch pos -> (repeat batch) pos", repeat=resampling_prompts.shape[0]
+    )
+
+    # Do the patching
+    corrupted_logits = model.run_with_hooks(
+        repeated_token_ids,
+        fwd_hooks=[(attn_layer_name, resample_ablation_hook_fnc)],
+    )  # (batch, pos, d_vocab)
+
+    # Return
+    return (
+        corrupted_logits[:, -1, correct_token_id]
+        - corrupted_logits[:, -1, incorrect_token_id]
+    )
+
+
+# %%
+def get_logit_diff(example, model):
+    token_ids = model.to_tokens(example["text"])
+    correct_token_id = model.to_single_token(example["correct"])
+    incorrect_token_id = model.to_single_token(example["incorrect"])
+
+    logits = model(token_ids)  # (batch, pos, d_vocab)
+
+    return logits[:, -1, correct_token_id] - logits[:, -1, incorrect_token_id]
+
+
+# %%
+logit_diffs_dla = []
+logit_diffs_ra = []
+
+layer, head = 0, 2
 for example in examples:
-    text = example['text']
-    answer = example['answer']
+    # Contribution to logit diff of H0.2, according to DLA
+    logit_diffs_dla.append(
+        get_DLA_logit_diff_attn_head(example, model, layer, head).item()
+    )
 
-    ablated_results = []
-    ori_tokens = model.to_tokens(text)
-    answer_token_id = model.to_tokens(answer, prepend_bos=False)[0][0].item()
-
-    for random_prompt_idx in range(n_prompts):
-        corrupted_tokens = prompts[random_prompt_idx:random_prompt_idx+1, :ori_tokens.shape[-1]]
-
-        # show original probability
-        original_logits = model(ori_tokens, return_type="logits")
-        ori_prob, ori_token = torch.max(torch.softmax(original_logits[0, -1, :], dim=-1), dim=-1)
-        ori_prob, ori_token = ori_prob.item(), ori_token.item()
-
-        _, corrupted_activation = model.run_with_cache(corrupted_tokens)
-
-        layer, head = 0, 2
-        hook_fnc = partial(resample_ablation, corrupted_activation=corrupted_activation, head=head)
-        ablated_logits = model.run_with_hooks(
-            ori_tokens,
-            return_type="logits",
-            fwd_hooks=[(get_act_name('result', layer), hook_fnc)]
-        )
-
-        # get the token with highest probability, get the probability as well
-        ablated_prob = ablated_logits.softmax(dim=-1)[0, -1, answer_token_id].item()
-        ablated_results.append(ori_prob - ablated_prob)
-
-    prob_diffs.append(ablated_results)
+    # Contribution to logit diff of H0.2, according to resampling ablation
+    # Get the original logit diff and subtract the resampling ablation logit diff
+    # to get the contribution
+    orig_logit_diff = get_logit_diff(example, model)
+    ra_logit_diff = get_resample_ablation_logit_diff_attn_head(
+        example, model, layer, head,
+    )
+    logit_diff_contribution = (orig_logit_diff - ra_logit_diff).tolist()
+    logit_diffs_ra.append(logit_diff_contribution)
 
 #%%
-del original_logits, ablated_logits, corrupted_activation
-gc.collect()
+df = pd.DataFrame()
+df["contribution"] = logit_diffs_dla
+df["method"] = "DLA"
+df["example"] = range(len(examples))
 
-#%%
-df_ablated = pd.DataFrame()
-for i, _ in enumerate(examples):
+for i, contrib in enumerate(logit_diffs_ra):
     tmp_df = pd.DataFrame()
-    tmp_df['prob_diff'] = prob_diffs[i]
-    tmp_df['example'] = i
-    df_ablated = pd.concat([df_ablated, tmp_df])
-df_ablated["type"] = "ablation"
+    tmp_df["contribution"] = contrib
+    tmp_df["method"] = "RA"
+    tmp_df["example"] = i
+    df = pd.concat([df, tmp_df])
 
 #%%
-def get_H02_prob_contribution_by_DLA(
-    prompt: str, answer: str, model: HookedTransformer
-)-> Tuple[float, float]:
+fig, ax = plt.subplots(1, 3, figsize=(14, 6))
 
-    layer, head = 0, 2
-    logits, cache = model.run_with_cache(prompt)
-
-    # select last position
-    logits: Float[Tensor, "batch dvocab"] = logits[:, -1, :]
-
-    # calculate direct logits attribution
-    attn_out_H02: Float[Tensor, "batch dmodel"] = cache["result", layer][:, -1, head, :]
-
-    sf = cache["ln_final.hook_scale"][0, -1]
-    direct_logits: Float[Tensor, "batch dvocab"] = einops.einsum(
-        (attn_out_H02 - attn_out_H02.mean(dim=-1)) / sf,
-        model.W_U,
-        "batch dmodel, dmodel dvocab -> batch dvocab",
-    )
-
-    token_idx = model.tokenizer(answer)["input_ids"]
-    prob_new = (logits - direct_logits).softmax(dim=-1)[0, token_idx].item()
-    prob_ori = logits.softmax(dim=-1)[0, token_idx].item()
-    prob_diff = prob_ori - prob_new
-
-    print(f"Prompt: {prompt}")
-    print(
-        f"Original prob: {prob_ori:.2f}, Prob if remove DLA: {prob_new:.2f}, Prob diff: {prob_diff:.2f}"
-    )
-    print()
-
-    return prob_ori, prob_diff
-
-#%%
-prob_diffs_DLA = []
-orig_probs = []
-for example in examples:
-    text = example['text']
-    answer = example['answer']
-
-    prob_ori, prob_diff = get_H02_prob_contribution_by_DLA(text, answer, model)
-    prob_diffs_DLA.append(prob_diff)
-    orig_probs.append(prob_ori)
-
-#%%
-df_dla = pd.DataFrame()
-df_dla['prob_diff'] = prob_diffs_DLA
-df_dla['example'] = np.arange(len(examples))
-df_dla["type"] = "DLA"
-
-df = pd.concat([df_ablated, df_dla])
-
-#%%
-fig, ax = plt.subplots(1, 3, figsize=(12, 5), sharey=True)
-
-for i, example in enumerate(examples):
+for i in range(len(examples)):
     sns.barplot(
-        data=df[df['example'] == i],
-        x="type",
-        y="prob_diff",
-        estimator="median",
-        errorbar=("pi", 75),
-        ax=ax[i],
+        data=df.query(f"example == {i}"),
+        x="method",
+        y="contribution",
+        errorbar=("pi", 99),
+        ax=ax[i]
     )
-    ax[i].set_title(
-        f"Prompt {i+1}\n"
-        f'Original Probabilty: {orig_probs[i]:.2f}'
-    )
+    ax[i].axhline(0, color="black", linestyle="--")
     ax[i].set_xlabel("")
     if i == 0:
-        ax[i].set_ylabel("Probability Contribution")
+        ax[i].set_ylabel("Logit Diff Contribution")
     else:
         ax[i].set_ylabel("")
-    ax[i].set_xticklabels(["Resample Ablation", "DLA"])
+    ax[i].set_xticklabels(["Direct Logit Attribution", "Resample Ablation"])
+    ax[i].set_title(
+        f"Prompt: {repr(examples[i]['text'])}\n"
+        f"Correct token: {repr(examples[i]['correct'])}\n"
+        f"Incorrect token: {repr(examples[i]['incorrect'])}"
+    )
 
 fig.suptitle(
-    f"Comparison of Contributions to Correct Token Probabiity\n"
-    f"Resample Ablation vs. DLA applied to H0.2\n"
-    f"Ablation done with {n_prompts} random prompts, applied to only the last position\n"
-    f"Error bars: q25 - q75"
+    "Contribution of H0.2 to logit difference between correct and incorrect tokens,"
+    " according to DLA and resampling ablation"
 )
 fig.tight_layout()
 
 #%%
 # Save figure
-fig.savefig(FIG_FILEPATH, bbox_inches="tight")
-print("Saved figure to file: ", FIG_FILEPATH)
+fig.savefig(FIG_FILEPATH)
+print(f"Saved figure to {FIG_FILEPATH}")
