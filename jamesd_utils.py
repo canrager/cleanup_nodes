@@ -137,8 +137,9 @@ def get_logit_diff_function(
     )
 
     logit_diff_bias = 0
-    if hasattr(model, "b_U"):
-        logit_diff_bias = model.b_U[correct_token_id] - model.b_U[incorrect_token_id]
+    # comment out the unemb bias
+    # if hasattr(model, "b_U"):
+    #     logit_diff_bias = model.b_U[correct_token_id] - model.b_U[incorrect_token_id]
 
     def calc_logit_diff(
         resid_final: Float[Tensor, "... d_model"],
