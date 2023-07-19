@@ -27,6 +27,7 @@ from itertools import product
 
 from transformer_lens import HookedTransformer, ActivationCache
 from transformer_lens.utils import get_act_name
+from plotting import ntensor_to_long
 import plotly.graph_objects as go
 import gc
 import seaborn as sns
@@ -69,20 +70,19 @@ def resample_ablation(activation, hook, head):
 # Compute loss diff using minibatch
 def compute_loss_diff_minibatch(prompts_t, model):
     logits = model(prompts_t, return_type="logits")
-    ori_loss: Float[Tensor, "batch"] = model.loss_fn(
+    ori_loss: Float[Tensor, "batch pos"] = model.loss_fn(
         logits=logits, tokens=prompts_t, per_token=True
-    ).mean(dim=-1)
+    )
+
+    mb_size = prompts_t.shape[0]
+    n_pos = prompts_t.shape[1] - 1
 
     ablated_loss_diff = torch.zeros(
-        (model.cfg.n_layers, model.cfg.n_heads, prompts_t.shape[0])
+        (model.cfg.n_heads, mb_size, n_pos)
     )
 
-    progress_bar = tqdm(
-        product(range(model.cfg.n_layers), range(model.cfg.n_heads)),
-        total=model.cfg.n_layers * model.cfg.n_heads,
-    )
-
-    for layer, head in progress_bar:
+    layer = 0
+    for head in tqdm(range(model.cfg.n_heads)):
         ablated_logits = model.run_with_hooks(
             prompts_t,
             return_type="logits",
@@ -90,23 +90,24 @@ def compute_loss_diff_minibatch(prompts_t, model):
                 (get_act_name("result", layer), partial(resample_ablation, head=head))
             ],
         )
-        losses_per_head: Float[Tensor, "batch"] = model.loss_fn(
+        losses_per_head: Float[Tensor, "batch pos"] = model.loss_fn(
             logits=ablated_logits, tokens=prompts_t, per_token=True
-        ).mean(dim=-1)
+        )
 
-        ablated_loss_diff[layer, head] = losses_per_head - ori_loss
+        ablated_loss_diff[head] = losses_per_head - ori_loss
 
     return ablated_loss_diff, ori_loss
 
 
 def compute_loss_diff(prompts_t, model, batch_size, mb_size=5):
+    n_pos = prompts_t.shape[1] - 1
     ablated_loss_diff = torch.zeros(
-        (model.cfg.n_layers, model.cfg.n_heads, batch_size)
+        (model.cfg.n_heads, batch_size, n_pos)
     )
-    ori_loss = torch.zeros(batch_size)
+    ori_loss = torch.zeros(batch_size, n_pos)
     for i in tqdm(range(0, batch_size, mb_size)):
         (
-            ablated_loss_diff[:, :, i : i + mb_size],
+            ablated_loss_diff[:, i : i + mb_size],
             ori_loss[i : i + mb_size],
         ) = compute_loss_diff_minibatch(
             prompts_t[i : i + mb_size], model
@@ -119,17 +120,49 @@ print("Done computing loss diff")
 print(f"Original losses: {ori_loss.mean().item()}")
 # %% generate plot
 
-fig = px.imshow(
-    ablated_loss_diff.mean(dim=-1).round(decimals=2),
-    color_continuous_midpoint=0,
-    color_continuous_scale="RdBu",
-    title=f"Resample Ablation Loss Diff for each Head, average over {BATCH_SIZE} prompts and {model.cfg.n_ctx-1} positions<br>Average original loss: {ori_loss.mean().item():.2f}",
-    labels=dict(x="Head", y="Layer"),
-    text_auto=True,
+# fig = px.imshow(
+#     ablated_loss_diff.mean(dim=-1).round(decimals=2),
+#     color_continuous_midpoint=0,
+#     color_continuous_scale="RdBu",
+#     title=f"Resample Ablation Loss Diff for each Head, average over {BATCH_SIZE} prompts and {model.cfg.n_ctx-1} positions<br>Average original loss: {ori_loss.mean().item():.2f}",
+#     labels=dict(x="Head", y="Layer"),
+#     text_auto=True,
+# )
+
+df = ntensor_to_long(
+    ablated_loss_diff,
+    value_name="loss_increase",
+    dim_names=["head", "batch", "pos"],
 )
 
 # %%
-# Write the figure to file
-fig.write_image(FIG_FILEPATH)  # requires kaleido installed
-print("Saved figure to file: ", FIG_FILEPATH)
+fig, ax = plt.subplots(figsize=(10, 6))
+
+sns.barplot(
+    data=df,
+    x="head",
+    y="loss_increase",
+    estimator="median",
+    errorbar=("pi", 75),
+    ax=ax
+)
+
+ax.set_title(
+    f"Resample Ablation Loss Increase for each Head in Layer 0\n"
+    f"Median across batch (n={BATCH_SIZE}) and position (n={1023})\n"
+    f"Median of original loss: {ori_loss.median().item():.2f}\n"
+    f"Error bars: q25 - q75"
+)
+ax.set_ylabel("Loss Increase")
+ax.set_xlabel("")
+ax.set_xticks(
+    ticks=range(model.cfg.n_heads),
+    labels=[f"H0.{h}" for h in range(model.cfg.n_heads)],
+)
+
+fig.tight_layout()
+#%%
+# Save figure
+fig.savefig(FIG_FILEPATH)
+print(f"Saved figure to {FIG_FILEPATH}")
 # %%
