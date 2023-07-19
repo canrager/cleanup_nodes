@@ -109,7 +109,7 @@ def get_DLA_logit_diff_attn_head(example, model, layer, head):
 
     # Apply final layernorm to the attn head output
     attn_head_out_normed = (
-        attn_head_out - attn_head_out.mean(dim=-1, keepdim=True) / scale
+        (attn_head_out - attn_head_out.mean(dim=-1, keepdim=True)) / scale
     )
 
     return calc_logit_diff(attn_head_out_normed)
@@ -238,3 +238,5 @@ fig.tight_layout()
 # Save figure
 fig.savefig(FIG_FILEPATH)
 print(f"Saved figure to {FIG_FILEPATH}")
+
+# %%
