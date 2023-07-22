@@ -64,32 +64,28 @@ for i in range(model.cfg.n_layers):
 
 #%%
 # Get the original output of H0.2
-orig_logits, cache = model.run_with_cache(
+logits, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
         "blocks.0.attn.hook_result" in name or
+        "blocks.2.attn.hook_result" in name or
         "blocks.2.ln1.hook_scale" in name or
         name in resid_names
     ),
     device=device,
 )
-# Select head 2 but keep the head dimension
-orig_H0_2 = cache["blocks.0.attn.hook_result"][:, :, 2:3, :]  # (batch, pos, 1, d_model)
 
-# orig_loss = torch.nn.functional.cross_entropy(
-#     einops.rearrange(orig_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
-#     einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
-#     reduction="none",
-# )
+# Take what we need from cache
+orig_H0_2 = cache["blocks.0.attn.hook_result"][:, :, 2:3, :]  # (batch, pos, 1, d_model)
+orig_H2_X = cache["blocks.2.attn.hook_result"]  # (batch, pos, head, d_model)
+orig_ln_scale = cache["blocks.2.ln1.hook_scale"]  # (batch, pos, head, 1)
 
 orig_resids = torch.stack(
     [cache[name] for name in resid_names],
     dim=0,
 )  # shape: (resid, batch, pos, d_model)
 
-orig_ln_scale = cache["blocks.2.ln1.hook_scale"]
-
-del orig_logits, cache
+del logits, cache
 gc.collect()
 
 #%%
@@ -110,7 +106,7 @@ def hook_patch_ln_scale(scale, hook):
 model.reset_hooks()
 model.add_hook("blocks.2.hook_v_input", hook_remove_H0_2, level=1)
 model.add_hook("blocks.2.ln1.hook_scale", hook_patch_ln_scale, level=1)
-patched_logits, cache = model.run_with_cache(
+logits, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
         "blocks.2.attn.hook_result" in name or
@@ -120,12 +116,7 @@ patched_logits, cache = model.run_with_cache(
 )
 model.reset_hooks()
 
-# patched_loss = torch.nn.functional.cross_entropy(
-#     einops.rearrange(patched_logits[:, :-1, :], "batch pos d_vocab -> (batch pos) d_vocab"),
-#     einops.rearrange(prompts[:, 1:], "batch pos -> (batch pos)"),
-#     reduction="none",
-# )
-
+# Take what we need from cache
 patched_H2_X = cache["blocks.2.attn.hook_result"]
 
 patched_resids = torch.stack(
@@ -133,11 +124,16 @@ patched_resids = torch.stack(
     dim=0,
 )  # shape: (resid, batch, pos, d_model)
 
-del patched_logits, cache
+del logits, cache
 gc.collect()
 
 #%%
-df_head = ntensor_to_long(
+df_per_head_orig = ntensor_to_long(
+    projection_ratio(orig_H2_X, orig_H0_2),
+    value_name="projection_ratio",
+    dim_names=["batch", "pos", "head"],
+)
+df_per_head_patched = ntensor_to_long(
     projection_ratio(patched_H2_X, orig_H0_2),
     value_name="projection_ratio",
     dim_names=["batch", "pos", "head"],
@@ -213,27 +209,51 @@ fig_a.savefig(FIG_A_FILEPATH, bbox_inches="tight")
 print(f"Saved figure to {FIG_A_FILEPATH}")
 
 #%%
-fig_b, ax_b = plt.subplots(figsize=(12, 6))
+fig_b, ax_b = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
 
+# Left subplot
 sns.barplot(
-    data=df_head,
+    data=df_per_head_orig,
     x="head",
     y="projection_ratio",
     estimator="median",
     errorbar=("pi", 75),
-    ax=ax_b,
+    ax=ax_b[0],
 )
-ax_b.set_title(
-    f"Projection of H2.X onto H0.2 with Patching (H0.2 subtracted from V_input)\n"
+ax_b[0].set_title(
+    f"Projection of H2.X onto H0.2 without patching\n"
     f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
     f"Error bars: q25 - q75"
 )
-ax_b.set_ylabel("Projection Ratio")
-ax_b.set_xlabel("")
-ax_b.set_xticks(
+ax_b[0].set_ylabel("Projection Ratio")
+ax_b[0].set_xlabel("")
+ax_b[0].set_xticks(
     ticks=range(model.cfg.n_heads),
     labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
-);
+)
+
+# Right subplot
+sns.barplot(
+    data=df_per_head_patched,
+    x="head",
+    y="projection_ratio",
+    estimator="median",
+    errorbar=("pi", 75),
+    ax=ax_b[1],
+)
+ax_b[1].set_title(
+    f"Projection of H2.X onto H0.2 with patching (H0.2 subtracted from V_input)\n"
+    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    f"Error bars: q25 - q75"
+)
+ax_b[1].set_ylabel("")
+ax_b[1].set_xlabel("")
+ax_b[1].set_xticks(
+    ticks=range(model.cfg.n_heads),
+    labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+)
+
+fig_b.tight_layout()
 
 #%%
 fig_b.savefig(FIG_B_FILEPATH, bbox_inches="tight")
