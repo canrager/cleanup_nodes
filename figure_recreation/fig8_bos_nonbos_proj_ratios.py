@@ -156,7 +156,7 @@ df_nonbos = ntensor_to_long(
 df_nonbos["projection_value"] = projection_value(results_H2_X, result_H0_2_nonbos).flatten().cpu().numpy()
 
 #%%
-sns.set(font_scale=1.2)
+# sns.set(font_scale=1.0)
 fig, ax = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
 # Subplot 1: BOS
@@ -171,9 +171,10 @@ sns.lineplot(
 ax[0].axhline(0, color="black", linestyle="--")
 ax[0].set_ylabel("Projection Ratio")
 ax[0].set_title(
-    f"Projection of sum(H2.X) onto H0.2 BOS only\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    f"Projection of sum(H2.X) onto H0.2 BOS only",
+    fontsize=16,
+    # f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    # f"Error bars: q25 - q75"
 )
 
 # Subplot 2: non-BOS
@@ -189,9 +190,10 @@ ax[1].axhline(0, color="black", linestyle="--")
 ax[1].set_xlabel("Position")
 ax[1].set_ylabel("Projection Ratio")
 ax[1].set_title(
-    f"Projection of sum(H2.X) onto H0.2 non-BOS only\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    f"Projection of sum(H2.X) onto H0.2 non-BOS only",
+    fontsize=16,
+    # f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
+    # f"Error bars: q25 - q75"
 )
 
 fig.tight_layout()

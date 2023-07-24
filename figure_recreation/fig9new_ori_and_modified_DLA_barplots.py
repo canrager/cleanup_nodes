@@ -163,8 +163,8 @@ for i in range(len(examples)):
     )
 
 fig.suptitle(
-    f"Contribution of H0.2 to logit difference between correct and incorrect tokens\n"
-    f"according to DLA and modified DLA (project final resid onto H0.2 before ln+unemb)\n"
+    f"Contribution of H0.2 to logit difference according to DLA and modified DLA",
+    fontsize=16,
 )
 fig.tight_layout()
 

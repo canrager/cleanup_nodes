@@ -106,9 +106,8 @@ sns.lineplot(
     ax=ax,
 )
 ax.set_title(
-    f"Projection of Residual Stream onto H0.2\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    "Projections of residual stream onto H0.2",
+    fontsize=16,
 )
 ax.set_ylabel("Projection Ratio")
 ax.set_xlabel("")

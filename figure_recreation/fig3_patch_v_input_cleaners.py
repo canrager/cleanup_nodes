@@ -183,9 +183,8 @@ sns.lineplot(
     ax=ax_a,
 )
 ax_a.set_title(
-    f"Projection of Residual Stream onto H0.2 with Patching (H0.2 subtracted from V_input)\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    f"Projection of residual stream onto H0.2 without/with patching (H0.2 subtracted from V_input)",
+    fontsize=13,
 )
 ax_a.set_ylabel("Projection Ratio")
 ax_a.set_xlabel("")
@@ -209,7 +208,7 @@ fig_a.savefig(FIG_A_FILEPATH, bbox_inches="tight")
 print(f"Saved figure to {FIG_A_FILEPATH}")
 
 #%%
-fig_b, ax_b = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+fig_b, ax_b = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 
 # Left subplot
 sns.barplot(
@@ -221,15 +220,15 @@ sns.barplot(
     ax=ax_b[0],
 )
 ax_b[0].set_title(
-    f"Projection of H2.X onto H0.2 without patching\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    f"Projections of H2.X onto H0.2 without patching",
+    fontsize=16,
 )
 ax_b[0].set_ylabel("Projection Ratio")
 ax_b[0].set_xlabel("")
 ax_b[0].set_xticks(
     ticks=range(model.cfg.n_heads),
     labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+    fontsize=14,
 )
 
 # Right subplot
@@ -242,15 +241,15 @@ sns.barplot(
     ax=ax_b[1],
 )
 ax_b[1].set_title(
-    f"Projection of H2.X onto H0.2 with patching (H0.2 subtracted from V_input)\n"
-    f"Median across batch (n={prompts.shape[0]}) and position (n={prompts.shape[1]})\n"
-    f"Error bars: q25 - q75"
+    f"Projections of H2.X onto H0.2 with patching",
+    fontsize=16,
 )
 ax_b[1].set_ylabel("")
 ax_b[1].set_xlabel("")
 ax_b[1].set_xticks(
     ticks=range(model.cfg.n_heads),
     labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+    fontsize=14,
 )
 
 fig_b.tight_layout()

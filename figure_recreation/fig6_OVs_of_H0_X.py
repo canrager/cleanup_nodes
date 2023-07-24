@@ -100,9 +100,8 @@ for xlim, head in zip(xlims, range(model.cfg.n_heads)):
         ax[row, col].get_legend().remove()
 
 fig.suptitle(
-    f"Histograms of norm(Embedding @ W_OV) for Each Head in Block 0\n"
-    f"Each embedding type's histogram is normalized to have unit area\n"
-    f"Embeddings for infrequent tokens are removed (n_tok_embeds={W_E.shape[0]}, n_pos_embeds={W_pos.shape[0]})"
+    f"Histograms of norm(scaled_embedding @ W_OV) for each head in layer 0",
+    fontsize=16,
 )
 fig.tight_layout()
 

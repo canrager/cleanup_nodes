@@ -127,7 +127,7 @@ node_names_without.remove(WRITER_NAME)
 
 #%%
 # Create figure
-fig, ax = plt.subplots(figsize=(16, 5))
+fig, ax = plt.subplots(figsize=(13, 5))
 
 sns.barplot(
     data=df.query("node_name != @WRITER_NAME"),
@@ -141,18 +141,17 @@ sns.barplot(
 
 # Add vlines to separate layers
 for l in [node_names_without.index(f"H{i}.0") for i in range(1, model.cfg.n_layers)]:
-    ax.axvline(l - 0.5, color="black", linewidth=1)
+    ax.axvline(l - 0.5, color="black", linewidth=1, linestyle="--")
 
 # Rotate x-axis labels
 for tick in ax.get_xticklabels():
     tick.set_rotation(90)
 
 ax.set_title(
-    f"Projections Ratios of All Nodes (except {WRITER_NAME}) Projected onto {WRITER_NAME}\n"
-    f"Median across batch (n={proj_ratios.shape[1]}) and position (n={proj_ratios.shape[2]})\n"
-    f"Error bars: q25 - q75"
+    f"Projection ratios of all nodes (except {WRITER_NAME}) projected onto {WRITER_NAME}",
+    fontsize=16,
 )
-ax.set_xlabel("Node Name")
+ax.set_xlabel("")
 ax.set_ylabel("Projection Ratio");
 
 #%%

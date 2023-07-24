@@ -129,12 +129,11 @@ sns.lineplot(
     errorbar=("pi", 75),
     ax=ax_b[0],
 )
-ax_b[0].set_xlabel("Query Position of BOS")
-ax_b[0].set_ylabel("Attention Probability")
+ax_b[0].set_xlabel("Query Position (Dest)")
+ax_b[0].set_ylabel("Attention Weight")
 ax_b[0].set_title(
-    f"Attention Probabilities in H0.2 of the BOS Column\n"
-    f"Median across batch (n={prompts.shape[0]})\n"
-    f"Error bars: q25-q75"
+    f"Attention weights in H0.2 of BOS token",
+    fontsize=16,
 )
 
 # Subplot 2
@@ -146,13 +145,12 @@ sns.lineplot(
     errorbar=("pi", 75),
     ax=ax_b[1],
 )
-ax_b[1].set_xlabel("Query Position of non-BOS")
-ax_b[1].set_ylabel("Attention Probability")
+ax_b[1].set_xlabel("Query Position (Dest)")
+ax_b[1].set_ylabel("Attention Weight")
+# ax_b[1].set_yscale("log")
 ax_b[1].set_title(
-    f"Attention Probabilities in H0.2 of the non-BOS Values\n"
-    f"Median across batch (n={prompts.shape[0]}) and key position\n"
-    f"The ith query position has i non-BOS values along the key axis\n"
-    f"Error bars: q25-q75"
+    f"Attention weights in H0.2 of non-BOS tokens",
+    fontsize=16,
 )
 
 fig_b.tight_layout()

@@ -148,10 +148,9 @@ sns.barplot(
 )
 
 ax.set_title(
-    f"Resample Ablation Loss Increase for each Head in Layer 0\n"
-    f"Median across batch (n={BATCH_SIZE}) and position (n={1023})\n"
-    f"Median of original loss: {ori_loss.median().item():.2f}\n"
-    f"Error bars: q25 - q75"
+    f"Resample ablation loss increase for each head in layer 0\n"
+    f"Median loss without ablation: {ori_loss.median().item():.2f}",
+    fontsize=16,
 )
 ax.set_ylabel("Loss Increase")
 ax.set_xlabel("")
@@ -159,6 +158,7 @@ ax.set_xticks(
     ticks=range(model.cfg.n_heads),
     labels=[f"H0.{h}" for h in range(model.cfg.n_heads)],
 )
+ax.get_xticklabels()[2].set_weight("bold")
 
 fig.tight_layout()
 #%%
