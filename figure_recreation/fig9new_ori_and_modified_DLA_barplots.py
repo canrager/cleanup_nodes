@@ -155,7 +155,7 @@ for i in range(len(examples)):
         ax[i].set_ylabel("Logit Diff Contribution")
     else:
         ax[i].set_ylabel("")
-    ax[i].set_xticklabels(["DLA", "Modified DLA"])
+    ax[i].set_xticklabels(["DLA", "Modified DLA"], fontsize=12)
     ax[i].set_title(
         f"Prompt: {repr(examples[i]['text'])}\n"
         f"Correct token: {repr(examples[i]['correct'])}\n"
@@ -172,5 +172,3 @@ fig.tight_layout()
 # Save figure
 fig.savefig(FIG_FILEPATH)
 print(f"Saved figure to {FIG_FILEPATH}")
-
-# %%
