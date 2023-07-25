@@ -34,6 +34,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
+IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
+
 FIG_FILEPATH = "figs/fig9new_DLA_barplots.jpg"
 
 # Transformer Lens model names:
@@ -48,18 +50,22 @@ model.cfg.use_attn_result = True
 # %%
 examples = [
     {
-        "text": "It's in the shelf, either on the top or the",
+        # "text": "It's in the shelf, either on the top or the",
+        "text": IPSUM + " It's in the shelf, either on the top or the",
         "correct": " bottom",
         "incorrect": " top",
     },
     {
-        "text": "I went to university at Michigan",
+        # "text": "I went to university at Michigan",
+        "text": 2 * IPSUM + " I went to university at Michigan",
         "correct": " State",
         "incorrect": " University",
     },
     {
-        "text": "class MyClass:\n\tdef",
+        # "text": "class MyClass:\n\tdef",
+        "text": IPSUM + " class MyClass:\n\tdef",
         "correct": " __",
+        # "incorrect": " on",
         "incorrect": " get",
     },
 ]
@@ -157,7 +163,8 @@ for i in range(len(examples)):
         ax[i].set_ylabel("")
     ax[i].set_xticklabels(["DLA", "Modified DLA"], fontsize=12)
     ax[i].set_title(
-        f"Prompt: {repr(examples[i]['text'])}\n"
+        # f"Prompt: {repr(examples[i]['text'])}\n"
+        f"Prompt: {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
         f"Correct token: {repr(examples[i]['correct'])}\n"
         f"Incorrect token: {repr(examples[i]['incorrect'])}"
     )
