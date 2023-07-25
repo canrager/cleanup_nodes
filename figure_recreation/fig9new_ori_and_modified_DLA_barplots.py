@@ -35,6 +35,7 @@ torch.set_grad_enabled(False)
 device = "cpu"
 
 IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
+# IPSUM = ""
 
 FIG_FILEPATH = "figs/fig9new_DLA_barplots.jpg"
 
@@ -65,8 +66,8 @@ examples = [
         # "text": "class MyClass:\n\tdef",
         "text": IPSUM + " class MyClass:\n\tdef",
         "correct": " __",
-        # "incorrect": " on",
-        "incorrect": " get",
+        # "incorrect": " get",
+        "incorrect": " on",
     },
 ]
 
@@ -120,11 +121,20 @@ def get_DLA_logit_diff_attn_head(example, model, layer, head, modified=False):
     return calc_logit_diff(attn_head_out_normed)
 
 # %%
+logit_diffs = []
 logit_diffs_dla = []
 logit_diffs_dla_modified = []
 
 layer, head = 0, 2
 for example in examples:
+    # Get logit diffs
+    token_ids = model.to_tokens(example["text"])
+    correct_token_id = model.to_single_token(example["correct"])
+    incorrect_token_id = model.to_single_token(example["incorrect"])
+    logits = model(token_ids)[0, -1]
+    logit_diff = (logits[correct_token_id] - logits[incorrect_token_id]).item()
+    logit_diffs.append(logit_diff)
+
     # Contribution to logit diff of H0.2, according to DLA
     logit_diffs_dla.append(
         get_DLA_logit_diff_attn_head(example, model, layer, head, modified=False).item()
@@ -166,7 +176,8 @@ for i in range(len(examples)):
         # f"Prompt: {repr(examples[i]['text'])}\n"
         f"Prompt: {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
         f"Correct token: {repr(examples[i]['correct'])}\n"
-        f"Incorrect token: {repr(examples[i]['incorrect'])}"
+        f"Incorrect token: {repr(examples[i]['incorrect'])}\n"
+        f"Original logit difference: {logit_diffs[i]:.2f}"
     )
 
 fig.suptitle(
