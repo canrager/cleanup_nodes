@@ -1,14 +1,3 @@
-"""
-TODO:
-- Want a plot the tells us which layer has neurons doing cleanup
-  - Fix heads, fix neurons but select top N neurons by various metrics:
-     - .max(dim=head)
-- Try different neuron ranking metrics for `get_fig_head_to_mlp_neuron`
-  - Currently using quantile
-  - Can try proportion of (batch*pos) greater/lesser than some threshold
-
-"""
-
 # %%
 import itertools
 from typing import Tuple

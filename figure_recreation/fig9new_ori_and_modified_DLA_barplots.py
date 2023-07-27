@@ -51,8 +51,8 @@ model.cfg.use_attn_result = True
 # %%
 examples = [
     {
-        # "text": "It's in the shelf, either on the top or the",
-        "text": IPSUM + " It's in the shelf, either on the top or the",
+        # "text": "It's in the cupboard, either on the top or the",
+        "text": 6 * IPSUM + " It's in the cupboard, either on the top or the",
         "correct": " bottom",
         "incorrect": " top",
     },
