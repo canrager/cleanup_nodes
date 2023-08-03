@@ -13,7 +13,7 @@ model = HookedTransformer.from_pretrained(MODEL_NAME, device="cpu")
 #%%
 examples = [
     {
-        "text": IPSUM + " It's in the cupboard, either on the top or the",
+        "text": 6 * IPSUM + " It's in the cupboard, either on the top or the",
         'correct': ' bottom'
     },
     {

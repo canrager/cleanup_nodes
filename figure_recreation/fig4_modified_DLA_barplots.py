@@ -37,7 +37,7 @@ device = "cpu"
 IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
 # IPSUM = ""
 
-FIG_FILEPATH = "figs/fig9new_DLA_barplots.jpg"
+FIG_FILEPATH = "figs/fig4_modified_DLA_barplots.jpg"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
@@ -135,7 +135,7 @@ for example in examples:
     logit_diff = (logits[correct_token_id] - logits[incorrect_token_id]).item()
     logit_diffs.append(logit_diff)
 
-    # Contribution to logit diff of H0.2, according to DLA
+    # Contribution to logit diff of L0H2, according to DLA
     logit_diffs_dla.append(
         get_DLA_logit_diff_attn_head(example, model, layer, head, modified=False).item()
     )
@@ -168,20 +168,21 @@ for i in range(len(examples)):
     ax[i].axhline(0, color="black", linestyle="--")
     ax[i].set_xlabel("")
     if i == 0:
-        ax[i].set_ylabel("Logit Diff Contribution")
+        ax[i].set_ylabel("Logit Diff Contribution", fontsize=14)
     else:
         ax[i].set_ylabel("")
-    ax[i].set_xticklabels(["DLA", "Modified DLA"], fontsize=12)
+    ax[i].set_xticklabels(["DLA", "modified DLA"], fontsize=12)
     ax[i].set_title(
         # f"Prompt: {repr(examples[i]['text'])}\n"
-        f"Prompt: {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
+        f"Prompt: <LI> + {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
         f"Correct token: {repr(examples[i]['correct'])}\n"
         f"Incorrect token: {repr(examples[i]['incorrect'])}\n"
-        f"Original logit difference: {logit_diffs[i]:.2f}"
+        f"Original logit difference: {logit_diffs[i]:.2f}",
+        fontsize=11,
     )
 
 fig.suptitle(
-    f"Contribution of H0.2 to logit difference according to DLA and modified DLA",
+    f"Contribution of L0H2 to logit difference according to DLA and modified DLA",
     fontsize=16,
 )
 fig.tight_layout()

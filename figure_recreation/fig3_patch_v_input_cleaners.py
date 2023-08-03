@@ -28,8 +28,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 240
-N_CODE_PROMPTS = 60
+N_TEXT_PROMPTS = 2
+N_CODE_PROMPTS = 1
 FIG_A_FILEPATH = "figs/fig3a_patch_v_input_resid_lineplot.jpg"
 FIG_B_FILEPATH = "figs/fig3b_patch_v_input_head_barplot.jpg"
 
@@ -63,7 +63,7 @@ for i in range(model.cfg.n_layers):
     resid_names.append(f"blocks.{i}.hook_resid_post")
 
 #%%
-# Get the original output of H0.2
+# Get the original output of L0H2
 logits, cache = model.run_with_cache(
     prompts,
     names_filter=lambda name: (
@@ -76,8 +76,8 @@ logits, cache = model.run_with_cache(
 )
 
 # Take what we need from cache
-orig_H0_2 = cache["blocks.0.attn.hook_result"][:, :, 2:3, :]  # (batch, pos, 1, d_model)
-orig_H2_X = cache["blocks.2.attn.hook_result"]  # (batch, pos, head, d_model)
+orig_L0H2 = cache["blocks.0.attn.hook_result"][:, :, 2:3, :]  # (batch, pos, 1, d_model)
+orig_L2HX = cache["blocks.2.attn.hook_result"]  # (batch, pos, head, d_model)
 orig_ln_scale = cache["blocks.2.ln1.hook_scale"]  # (batch, pos, head, 1)
 
 orig_resids = torch.stack(
@@ -89,14 +89,14 @@ del logits, cache
 gc.collect()
 
 #%%
-# Remove H0.2 from the v_input to H2.X
-def hook_remove_H0_2(activations, hook):
+# Remove L0H2 from the v_input to L2HX
+def hook_remove_L0H2(activations, hook):
     if hook.name == "blocks.2.hook_v_input":
         print("Did the v_input hook!")
-        activations = activations - orig_H0_2
+        activations = activations - orig_L0H2
     return activations
 
-# Use the original layernorm scale for H2.X
+# Use the original layernorm scale for L2HX
 def hook_patch_ln_scale(scale, hook):
     if hook.name == "blocks.2.ln1.hook_scale":
         print("Did the ln_final scale hook!")
@@ -104,7 +104,7 @@ def hook_patch_ln_scale(scale, hook):
 
 # Add hooks and run with cache
 model.reset_hooks()
-model.add_hook("blocks.2.hook_v_input", hook_remove_H0_2, level=1)
+model.add_hook("blocks.2.hook_v_input", hook_remove_L0H2, level=1)
 model.add_hook("blocks.2.ln1.hook_scale", hook_patch_ln_scale, level=1)
 logits, cache = model.run_with_cache(
     prompts,
@@ -129,12 +129,12 @@ gc.collect()
 
 #%%
 df_per_head_orig = ntensor_to_long(
-    projection_ratio(orig_H2_X, orig_H0_2),
+    projection_ratio(orig_L2HX, orig_L0H2),
     value_name="projection_ratio",
     dim_names=["batch", "pos", "head"],
 )
 df_per_head_patched = ntensor_to_long(
-    projection_ratio(patched_H2_X, orig_H0_2),
+    projection_ratio(patched_H2_X, orig_L0H2),
     value_name="projection_ratio",
     dim_names=["batch", "pos", "head"],
 )
@@ -142,11 +142,11 @@ df_per_head_patched = ntensor_to_long(
 #%%
 orig_resids_onto_writer_prs = projection_ratio(
     orig_resids,
-    einops.rearrange(orig_H0_2, "batch pos head d_model -> head batch pos d_model"),
+    einops.rearrange(orig_L0H2, "batch pos head d_model -> head batch pos d_model"),
 )
 patched_resids_onto_writer_prs = projection_ratio(
     patched_resids,
-    einops.rearrange(orig_H0_2, "batch pos head d_model -> head batch pos d_model"),
+    einops.rearrange(orig_L0H2, "batch pos head d_model -> head batch pos d_model"),
 )
 
 df_orig_resid = ntensor_to_long(
@@ -183,15 +183,14 @@ sns.lineplot(
     ax=ax_a,
 )
 ax_a.set_title(
-    f"Projection of residual stream onto H0.2 without/with patching (H0.2 subtracted from V_input)",
-    fontsize=13,
+    f"Projection of residual stream onto L0H2 without/with patching",
+    fontsize=14,
 )
-ax_a.set_ylabel("Projection Ratio")
+ax_a.set_ylabel("PR(resid, L0H2)", fontsize=14)
 ax_a.set_xlabel("")
 ax_a.set_xticks(
     ticks=range(len(resid_names_plot)),
     labels=resid_names_plot,
-    rotation=-20,
 )
 ax_a.legend(
     title="Run",
@@ -220,14 +219,14 @@ sns.barplot(
     ax=ax_b[0],
 )
 ax_b[0].set_title(
-    f"Projections of H2.X onto H0.2 without patching",
+    f"Projections of L2HX onto L0H2 without patching",
     fontsize=16,
 )
-ax_b[0].set_ylabel("Projection Ratio")
+ax_b[0].set_ylabel("PR(L2HX, L0H2)", fontsize=14)
 ax_b[0].set_xlabel("")
 ax_b[0].set_xticks(
     ticks=range(model.cfg.n_heads),
-    labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+    labels=[f"L2H{h}" for h in range(model.cfg.n_heads)],
     fontsize=14,
 )
 
@@ -241,14 +240,14 @@ sns.barplot(
     ax=ax_b[1],
 )
 ax_b[1].set_title(
-    f"Projections of H2.X onto H0.2 with patching",
+    f"Projections of L2HX onto L0H2 with patching",
     fontsize=16,
 )
 ax_b[1].set_ylabel("")
 ax_b[1].set_xlabel("")
 ax_b[1].set_xticks(
     ticks=range(model.cfg.n_heads),
-    labels=[f"H2.{h}" for h in range(model.cfg.n_heads)],
+    labels=[f"L2H{h}" for h in range(model.cfg.n_heads)],
     fontsize=14,
 )
 

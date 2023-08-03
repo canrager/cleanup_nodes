@@ -24,10 +24,10 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 240
-N_CODE_PROMPTS = 60
-WRITER_NAME = "H0.2"
-FIG_FILEPATH = "figs/fig2_H0_2_cleanup_barplot.jpg"
+N_TEXT_PROMPTS = 2
+N_CODE_PROMPTS = 1
+WRITER_NAME = "L0H2"
+FIG_FILEPATH = "figs/fig2_cleanup_barplots.jpg"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
@@ -36,8 +36,8 @@ MODEL_NAME = "gelu-4l"
 
 #%%
 def get_node_from_cache(cache, node_name: str) -> torch.Tensor:
-    if node_name.startswith("H"):
-        layer, head = node_name[1:].split(".")
+    if node_name.startswith("L"):
+        layer, head = node_name[1:].split("H")
         layer = int(layer)
         head = int(head)
         return cache[f'blocks.{layer}.attn.hook_result'][:, :, head, :].unsqueeze(0)
@@ -73,6 +73,7 @@ _, cache = model.run_with_cache(
     device=device,
 )
 
+#%%
 # Create a tensor of nodes
 nodes_list = []
 for l in range(model.cfg.n_layers):
@@ -92,19 +93,12 @@ all_nodes = torch.cat(nodes_list, dim=0)  # (n_nodes, batch, pos, d_model)
 node_names = []
 for l in range(model.cfg.n_layers):
     for h in range(model.cfg.n_heads):
-        node_names.append(f"H{l}.{h}")
+        node_names.append(f"L{l}H{h}")
     node_names.append(f"MLP{l}")
 
 
 # Get the writer node's tensor from a given node name
 writer_node = get_node_from_cache(cache, WRITER_NAME)
-
-# Check for shape alignment
-print(all_nodes.shape)
-print(writer_node.shape)
-
-torch.Size([36, 100, 1024, 512])
-torch.Size([1, 100, 1024, 512])
 
 # Calculate reinforcement ratios off all nodes projected onto the writer node
 proj_ratios = projection_ratio(all_nodes, writer_node)  # shape: (resid node batch pos)
@@ -126,8 +120,20 @@ node_names_without = node_names.copy()
 node_names_without.remove(WRITER_NAME)
 
 #%%
+df_sum_cleaners = (df
+    # [df.node_name.isin(["L2H2", "L2H4", "L2H5", "L2H6", "L2H7"])]
+    [df.node_name.isin(["L2H2", "L2H3", "L2H4", "L2H5", "L2H6", "L2H7"])]
+    # [df.node_name.isin(["L2H0", "L2H1", "L2H2", "L2H3", "L2H4", "L2H5", "L2H6", "L2H7"])]
+    [["projection_ratio", "batch", "pos", "node_name"]]
+    .groupby(["batch", "pos"]).sum()
+    .reset_index()
+    [["projection_ratio", "batch", "pos"]]
+)
+cleaner_median = df_sum_cleaners["projection_ratio"].median()
+
+#%%
 # Create figure
-fig, ax = plt.subplots(figsize=(13, 5))
+fig, ax = plt.subplots(figsize=(12, 5))
 
 sns.barplot(
     data=df.query("node_name != @WRITER_NAME"),
@@ -140,7 +146,7 @@ sns.barplot(
 )
 
 # Add vlines to separate layers
-for l in [node_names_without.index(f"H{i}.0") for i in range(1, model.cfg.n_layers)]:
+for l in [node_names_without.index(f"L{i}H0") for i in range(1, model.cfg.n_layers)]:
     ax.axvline(l - 0.5, color="black", linewidth=1, linestyle="--")
 
 # Rotate x-axis labels
@@ -148,11 +154,15 @@ for tick in ax.get_xticklabels():
     tick.set_rotation(90)
 
 ax.set_title(
-    f"Projection ratios of all nodes (except {WRITER_NAME}) projected onto {WRITER_NAME}",
+    (
+        f"Projection ratios of all nodes (except {WRITER_NAME}) projected onto {WRITER_NAME}\n"
+        f"Median PR of sum(L2H{{2,3,4,5,6,7}}) = {cleaner_median:.2f}"
+    ),
     fontsize=16,
 )
-ax.set_xlabel("")
-ax.set_ylabel("Projection Ratio");
+ax.set_xlabel("Node")
+ax.set_xticklabels(ax.get_xticklabels(), fontsize=12)
+ax.set_ylabel("PR(node, L0H2)", fontsize=12);
 
 #%%
 # Save figure
