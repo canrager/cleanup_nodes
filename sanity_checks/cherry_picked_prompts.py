@@ -24,6 +24,10 @@ examples = [
         "text": IPSUM + " class MyClass:\n\tdef",
         'correct': ' __'
     },
+    {
+        "text": 6 * IPSUM + "The church I go to is the Seventh-day Adventist",
+        "correct": " Church",
+    },
 ]
 
 #%%
