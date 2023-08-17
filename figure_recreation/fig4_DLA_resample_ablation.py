@@ -14,6 +14,7 @@ import einops
 import pandas as pd
 import numpy as np
 
+from tqdm.auto import trange
 from transformer_lens import HookedTransformer
 from load_data import get_prompts_t
 from jamesd_utils import get_logit_diff_function
@@ -32,7 +33,8 @@ IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting indust
 
 N_TEXT_PROMPTS = 2
 N_CODE_PROMPTS = 1
-FIG_FILEPATH = "figs/fig4_DLA_resample_ablation.jpg"
+FIG_A_FILEPATH = "figs/fig4a_DLA_resample_ablation.jpg"
+FIG_B_FILEPATH = "figs/fig4b_DLA_resample_ablation.jpg"
 
 # Transformer Lens model names:
 # https://github.com/neelnanda-io/TransformerLens/blob/3cd943628b5c415585c8ef100f65989f6adc7f75/transformer_lens/loading_from_pretrained.py#L127
@@ -52,7 +54,7 @@ if not (torch.unique(rand_prompts, dim=0).shape == rand_prompts.shape):
 # %%
 model = HookedTransformer.from_pretrained(MODEL_NAME, device=device)
 model.cfg.use_attn_result = True
-model.cfg.use_split_qkv_input = True  # Required?
+model.cfg.use_split_qkv_input = True  # Required to have a head dimension in hook_normalized
 
 # %%
 examples = [
@@ -121,7 +123,7 @@ def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, cl
 
     # TODO: think about how to correct for ln scale
     # Slightly different ways to patch:
-    #   - patch q/k/v_input (will change the ln scale of other heads)
+    #   - patch q/k/v_input (this is pre-ln)
     #   - patch ln1.hook_normalized
 
     # Get activations for patching
@@ -166,16 +168,144 @@ def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, cl
     return patched_head_out_ln @ logit_diff_direction
 
 # %%
-example = examples[0]
-orig_dla, clean_scale = get_head_DLA(model, example, 0, 2)
-ra_dlas = get_head_DLA_resample_ablation(model, example, 0, 2, rand_prompts, clean_scale)
+orig_logit_diffs = []
+for example in examples:
+    logits = model(example["text"])[0, -1]
+    logit_diff = (
+        logits[model.to_single_token(example["correct"])]
+        - logits[model.to_single_token(example["incorrect"])]
+    )
+    orig_logit_diffs.append(logit_diff.item())
 
-orig_dla, ra_dlas
 
 # %%
-for i in range(8):
-    example = examples[0]
-    orig_dla, clean_scale = get_head_DLA(model, example, 2, i)
-    ra_dlas = get_head_DLA_resample_ablation(model, example, 2, i, rand_prompts, clean_scale)
+layer, head = 0, 2
 
-    print(orig_dla, ra_dlas)
+orig_dlas = []
+ra_dlas = []
+for example in examples:
+    orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
+    ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+    orig_dlas.append(orig_dla)
+    ra_dlas.append(ra_dla)
+
+# %%
+df = pd.DataFrame()
+df["dla"] = orig_dlas
+df["example"] = [i+1 for i in range(len(orig_dlas))]
+df["type"] = "original"
+
+tmp_df = pd.DataFrame()
+for i, ra_dla in enumerate(ra_dlas):
+    tmp_df["dla"] = ra_dla
+    tmp_df["example"] = i+1
+    tmp_df["type"] = "resample"
+    df = pd.concat([df, tmp_df])
+
+# %%
+fig_a, ax_a = plt.subplots(2, 2, figsize=(12, 8))
+
+for i in range(len(examples)):
+    r, c = i // 2, i % 2
+    sns.barplot(
+        data=df.query(f"example == {i+1}"),
+        x="type",
+        y="dla",
+        estimator="median",
+        errorbar=("pi", 75),
+        ax=ax_a[r, c],
+    )
+    # Plot aesthetics
+    ax_a[r, c].set_title(
+        f"Prompt: ... {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
+        f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
+        f"Original logit difference: {orig_logit_diffs[i]:.2f}",
+        fontsize=12,
+    )
+    ax_a[r, c].set_xlabel("")
+    if c == 0:
+        ax_a[r, c].set_ylabel("Direct Logit Attribution", fontsize=12)
+    else:
+        ax_a[r, c].set_ylabel("")
+    ax_a[r, c].set_xticklabels(["Original", "Resample Ablation"], fontsize=12)
+
+fig_a.suptitle(f"DLA of L{layer}H{head}, with/without resample ablation", fontsize=16)
+fig_a.tight_layout()
+
+# %%
+attn_heads = [(3, 1), (3, 4), (3, 5), (3, 0),]
+
+orig_dlas2 = []
+ra_dlas2 = []
+for example, (layer, head) in zip(examples, attn_heads):
+    orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
+    ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+    orig_dlas2.append(orig_dla)
+    ra_dlas2.append(ra_dla)
+
+# %%
+df2 = pd.DataFrame()
+df2["dla"] = orig_dlas2
+df2["example"] = [i+1 for i in range(len(orig_dlas2))]
+df2["type"] = "original"
+
+tmp_df = pd.DataFrame()
+for i, ra_dla in enumerate(ra_dlas2):
+    tmp_df["dla"] = ra_dla
+    tmp_df["example"] = i+1
+    tmp_df["type"] = "resample"
+    df2 = pd.concat([df2, tmp_df])
+
+# %%
+fig_b, ax_b = plt.subplots(2, 2, figsize=(12, 8))
+
+for i in range(len(examples)):
+    r, c = i // 2, i % 2
+    sns.barplot(
+        data=df2.query(f"example == {i+1}"),
+        x="type",
+        y="dla",
+        estimator="median",
+        errorbar=("pi", 75),
+        ax=ax_b[r, c],
+    )
+    # Plot aesthetics
+    ax_b[r, c].axhline(0, color="black", linestyle="--")
+    ax_b[r, c].set_title(
+        f"Head = L{attn_heads[i][0]}H{attn_heads[i][1]}\n"
+        f"Prompt: ... {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
+        f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
+        f"Original logit difference: {orig_logit_diffs[i]:.2f}",
+        fontsize=12,
+    )
+    ax_b[r, c].set_xlabel("")
+    if c == 0:
+        ax_b[r, c].set_ylabel("Direct Logit Attribution", fontsize=12)
+    else:
+        ax_b[r, c].set_ylabel("")
+    ax_b[r, c].set_xticklabels(["Original", "Resample Ablation"], fontsize=12)
+
+fig_b.suptitle(f"DLAs of different heads, with/without resample ablation", fontsize=16)
+fig_b.tight_layout()
+
+# %%
+fig_a.savefig(FIG_A_FILEPATH)
+fig_b.savefig(FIG_B_FILEPATH)
+print("Figures saved to: ", FIG_A_FILEPATH, FIG_B_FILEPATH)
+
+
+# Code to find which heads have good anti-examples
+# %%
+# layer = 3
+# for head in range(8):
+#     print(f"L{layer}H{head}:")
+#     for example in examples:
+#         orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
+#         ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+#         print("\t", example["text"].replace(IPSUM, ""))
+#         print("\t", orig_dla, ra_dla)
+
+# # cupboard L3H1
+# # i went L3H4 or L3H3
+# # MyClass L3H5
+# # church L3H0
