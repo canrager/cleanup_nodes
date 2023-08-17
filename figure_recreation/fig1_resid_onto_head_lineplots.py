@@ -28,8 +28,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 2
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_FILEPATH = "figs/fig1_resid_onto_head_lineplots.jpg"
 
 # Transformer Lens model names:

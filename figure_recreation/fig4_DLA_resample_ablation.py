@@ -31,8 +31,8 @@ device = "cpu"
 IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
 # IPSUM = ""
 
-N_TEXT_PROMPTS = 2
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_A_FILEPATH = "figs/fig4a_DLA_resample_ablation.jpg"
 FIG_B_FILEPATH = "figs/fig4b_DLA_resample_ablation.jpg"
 
