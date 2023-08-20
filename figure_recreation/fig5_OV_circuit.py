@@ -137,11 +137,11 @@ dlas_L0H2 = []
 dlas_v_comp = []
 for i in trange(len(examples)):
     dla1, dla2 = get_results(model, examples[i])
-    dlas_L0H2.append(dla1)
-    dlas_v_comp.append(dla2)
+    dlas_L0H2.append(dla1.item())
+    dlas_v_comp.append(dla2.item())
 
 # %%
-fig, ax = plt.subplots(2, 2, figsize=(10,6))
+fig, ax = plt.subplots(2, 2, figsize=(10, 8))
 
 for i in range(len(examples)):
     r, c = divmod(i, 2)
@@ -154,8 +154,12 @@ for i in range(len(examples)):
     )
 
     # Plot aesthetics
-    ax[r, c].set_title(examples[i]["correct"])
+    ax[r, c].axhline(0, ls="--", color="black")
+    ax[r, c].set_title(f"Prompt {i+1}", fontsize=14)
+    # ax[r, c].set_title(f"{examples[i]['correct']}", fontsize=14)
     if c == 0:
-        ax[r, c].set_ylabel("Direct Logit Attribution")
+        ax[r, c].set_ylabel("Direct Logit Attribution", fontsize=13)
 
-plt.tight_layout()
+fig.tight_layout()
+
+# %%
