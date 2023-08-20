@@ -96,7 +96,7 @@ for i in range(model.cfg.n_layers):
     resid_names_plot.append(f"resid_post{i}")
 
 #%%
-fig, ax = plt.subplots(2, 1, figsize=(11, 10), sharex=True, sharey=True)
+fig, ax = plt.subplots(2, 1, figsize=(11, 10), sharex=True)
 
 # Top subplot
 sns.lineplot(

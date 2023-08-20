@@ -155,12 +155,12 @@ for tick in ax.get_xticklabels():
 
 ax.set_title(
     (
-        f"Projection ratios of all nodes (except {WRITER_NAME}) projected onto {WRITER_NAME}\n"
-        f"Median PR of sum(L2H{{2,3,4,5,6,7}}) = {cleaner_median:.2f}"
+        f"Projection ratios of all nodes (except {WRITER_NAME}) projected onto {WRITER_NAME}"
+        # f"Median PR of sum(L2H{{2,3,4,5,6,7}}) = {cleaner_median:.2f}"
     ),
     fontsize=16,
 )
-ax.set_xlabel("Node")
+ax.set_xlabel("node")
 ax.set_xticklabels(ax.get_xticklabels(), fontsize=12)
 ax.set_ylabel("PR(node, L0H2)", fontsize=12);
 
