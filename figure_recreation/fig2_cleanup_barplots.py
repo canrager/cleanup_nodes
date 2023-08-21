@@ -24,8 +24,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 4
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 WRITER_NAME = "L0H2"
 FIG_FILEPATH = "figs/fig2_cleanup_barplots.jpg"
 
@@ -119,7 +119,7 @@ df["node_name"] = df.node.map(lambda x: node_names[x])
 node_names_without = node_names.copy()
 node_names_without.remove(WRITER_NAME)
 
-#%% Not used in final plot, but in the plot description
+#%%
 df_sum_cleaners = (df
     # [df.node_name.isin(["L2H2", "L2H4", "L2H5", "L2H6", "L2H7"])]
     [df.node_name.isin(["L2H2", "L2H3", "L2H4", "L2H5", "L2H6", "L2H7"])]

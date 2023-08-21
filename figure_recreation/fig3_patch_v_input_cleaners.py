@@ -28,8 +28,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 24
-N_CODE_PROMPTS = 6
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_A_FILEPATH = "figs/fig3a_patch_v_input_resid_lineplot.jpg"
 FIG_B_FILEPATH = "figs/fig3b_patch_v_input_head_barplot.jpg"
 
@@ -117,7 +117,7 @@ logits, cache = model.run_with_cache(
 model.reset_hooks()
 
 # Take what we need from cache
-patched_L2HX = cache["blocks.2.attn.hook_result"]
+patched_H2_X = cache["blocks.2.attn.hook_result"]
 
 patched_resids = torch.stack(
     [cache[name] for name in resid_names],
@@ -134,7 +134,7 @@ df_per_head_orig = ntensor_to_long(
     dim_names=["batch", "pos", "head"],
 )
 df_per_head_patched = ntensor_to_long(
-    projection_ratio(patched_L2HX, orig_L0H2),
+    projection_ratio(patched_H2_X, orig_L0H2),
     value_name="projection_ratio",
     dim_names=["batch", "pos", "head"],
 )
