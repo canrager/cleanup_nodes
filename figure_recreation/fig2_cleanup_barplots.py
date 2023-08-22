@@ -166,5 +166,6 @@ ax.set_ylabel("PR(node, L0H2)", fontsize=12);
 
 #%%
 # Save figure
+print(f"Cleaners median: {cleaner_median}")
 fig.savefig(FIG_FILEPATH, bbox_inches="tight")
 print("Saved figure to file: ", FIG_FILEPATH)

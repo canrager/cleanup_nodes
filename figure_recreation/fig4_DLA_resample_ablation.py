@@ -8,16 +8,13 @@ if parent_path not in sys.path:
     sys.path.append(parent_path)
 
 # Imports
-import gc
 import torch
 import einops
 import pandas as pd
-import numpy as np
 
 from tqdm.auto import trange
 from transformer_lens import HookedTransformer
 from load_data import get_prompts_t
-from jamesd_utils import get_logit_diff_function
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -28,11 +25,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
-# IPSUM = ""
-
-N_TEXT_PROMPTS = 240
-N_CODE_PROMPTS = 60
+N_TEXT_PROMPTS = 2
+N_CODE_PROMPTS = 1
 FIG_A_FILEPATH = "figs/fig4a_DLA_resample_ablation.jpg"
 FIG_B_FILEPATH = "figs/fig4b_DLA_resample_ablation.jpg"
 
@@ -59,24 +53,29 @@ model.cfg.use_split_qkv_input = True  # Required to have a head dimension in hoo
 # %%
 examples = [
     {
-        "text": 4 * IPSUM + " It's in the cupboard, either on the top or the",
+        "text": "It's in the cupboard, either on the top or the",
         "correct": " bottom",
         "incorrect": " top",
+        # "incorrect": "back",
+        # Logit diff = 1.79
     },
     {
-        "text": 5 * IPSUM + " I went to university at Michigan",
+        "text": "I went to university at Michigan",
         "correct": " State",
         "incorrect": " University",
+        # Logit diff = 1.89
     },
     {
-        "text": IPSUM + " class MyClass:\n\tdef",
+        "text": "class MyClass:\n\tdef",
         "correct": " __",
-        "incorrect": " on",
+        "incorrect": " get",
+        # Logit diff = 3.02
     },
     {
-        "text": 6 * IPSUM + "The church I go to is the Seventh-day Adventist",
+        "text": "The church I go to is the Seventh-day Adventist",
         "correct": " Church",
-        "incorrect": " Advent",
+        "incorrect": " church",
+        # Logit diff = 0.94
     },
 ]
 
@@ -95,7 +94,8 @@ def get_head_DLA(model, example, layer, head):
     _, cache = model.run_with_cache(
         token_ids,
         names_filter=lambda name: (
-            name == f"blocks.{layer}.attn.hook_result" or name == "ln_final.hook_scale"
+            name == f"blocks.{layer}.attn.hook_result"
+            or name == "ln_final.hook_scale"
         ),
     )
 
@@ -105,11 +105,12 @@ def get_head_DLA(model, example, layer, head):
     apply_ln = lambda x: (x - x.mean(dim=-1, keepdim=True)) / scale
     head_out_ln = apply_ln(head_out)  # (d_model,)
 
+    # Need the scale of the clean run to use for layernoming in the resample ablation run
     return (head_out_ln @ logit_diff_direction).item(), scale
 
 
 def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale):
-    """Patch the q/k/v inputs of a head and get the DLA"""
+    """Patch the post-layernorm input of a head and get the DLA"""
 
     # Prep data for patching
     token_ids = model.to_tokens(example["text"])
@@ -121,20 +122,11 @@ def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, cl
         model.W_U[:, correct_token_id] - model.W_U[:, incorrect_token_id]
     )  # (d_model,)
 
-    # TODO: think about how to correct for ln scale
-    # Slightly different ways to patch:
-    #   - patch q/k/v_input (this is pre-ln)
-    #   - patch ln1.hook_normalized
-
     # Get activations for patching
     _, corrupted_cache = model.run_with_cache(
         rand_prompts[:, :token_ids.shape[1]],
         names_filter=lambda name: (
             name == f"blocks.{layer}.ln1.hook_normalized"  # (batch, pos, head, d_model)
-            # or name == f"blocks.{layer}.ln1.hook_scale"
-            # or name == f"blocks.{layer}.hook_q_input"
-            # or name == f"blocks.{layer}.hook_k_input"
-            # or name == f"blocks.{layer}.hook_v_input"
         ),
         device=device,
     )
@@ -160,12 +152,12 @@ def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, cl
     # Get DLAs of the patched run
     # (batch, d_model)
     patched_head_out = patched_cache[f"blocks.{layer}.attn.hook_result"][:, -1, head, :]
-    # scale = patched_cache["ln_final.hook_scale"][:, -1]  # (batch, 1)
 
     apply_ln = lambda x: (x - x.mean(dim=-1, keepdim=True)) / clean_scale
     patched_head_out_ln = apply_ln(patched_head_out)  # (batch, d_model)
 
     return patched_head_out_ln @ logit_diff_direction
+
 
 # %%
 orig_logit_diffs = []
@@ -217,7 +209,7 @@ for i in range(len(examples)):
     )
     # Plot aesthetics
     ax_a[r, c].set_title(
-        f"Prompt: ... {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
+        f"Prompt {i+1}: {repr(examples[i]['text'])}\n"
         f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
         f"Original logit difference: {orig_logit_diffs[i]:.2f}",
         fontsize=12,
@@ -233,11 +225,14 @@ fig_a.suptitle(f"DLA of L{layer}H{head}, with/without resample ablation", fontsi
 fig_a.tight_layout()
 
 # %%
-attn_heads = [(3, 1), (3, 4), (3, 5), (3, 0),]
+attn_heads = [(3, 1), (2, 1), (3, 5), (2, 2),]
 
 orig_dlas2 = []
 ra_dlas2 = []
-for example, (layer, head) in zip(examples, attn_heads):
+for i in trange(len(examples)):
+    example = examples[i]
+    layer, head = attn_heads[i]
+
     orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
     ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
     orig_dlas2.append(orig_dla)
@@ -273,7 +268,7 @@ for i in range(len(examples)):
     ax_b[r, c].axhline(0, color="black", linestyle="--")
     ax_b[r, c].set_title(
         f"Head = L{attn_heads[i][0]}H{attn_heads[i][1]}\n"
-        f"Prompt: ... {repr(examples[i]['text'].replace(IPSUM, ''))}\n"
+        f"Prompt {i+1}: {repr(examples[i]['text'])}\n"
         f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
         f"Original logit difference: {orig_logit_diffs[i]:.2f}",
         fontsize=12,
@@ -289,23 +284,24 @@ fig_b.suptitle(f"DLAs of different heads, with/without resample ablation", fonts
 fig_b.tight_layout()
 
 # %%
-fig_a.savefig(FIG_A_FILEPATH)
-fig_b.savefig(FIG_B_FILEPATH)
-print("Figures saved to: ", FIG_A_FILEPATH, FIG_B_FILEPATH)
+# fig_a.savefig(FIG_A_FILEPATH)
+# fig_b.savefig(FIG_B_FILEPATH)
+# print("Figures saved to: ", FIG_A_FILEPATH, FIG_B_FILEPATH)
 
 
 # Code to find which heads have good anti-examples
 # %%
-# layer = 3
-# for head in range(8):
+# layer = 2
+# for head in trange(8):
 #     print(f"L{layer}H{head}:")
-#     for example in examples:
-#         orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
-#         ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
-#         print("\t", example["text"].replace(IPSUM, ""))
-#         print("\t", orig_dla, ra_dla)
+#     # for example in examples:
+#     example = examples[3]
+#     orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
+#     ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+#     print("  ", repr(example["text"]))
+#     print("  ", orig_dla, ra_dla)
 
-# # cupboard L3H1
-# # i went L3H4 or L3H3
-# # MyClass L3H5
-# # church L3H0
+# # cupboard : L3H1, L3H5
+# # i went   : L2H1, L3H4, L3H3
+# # MyClass  : L3H5, L3H0
+# # church   : L2H2, L3H1
