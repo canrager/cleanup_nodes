@@ -20,7 +20,7 @@ from load_data import get_prompts_t
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from lmfit import Model # for linear regression
 
 # Global settings and variables
 sns.set()
@@ -130,6 +130,19 @@ start_pos = 32
 
 writer_dla, v_comp_dla = get_dla(model, prompts[:n_prompts], start_pos=start_pos)
 
+#%% Linear Fit
+def linear(x, m, b):
+    return m*x + b
+
+linear_model = Model(linear)
+linear_fit_result = linear_model.fit(
+    v_comp_dla, 
+    x=writer_dla, 
+    m=-1,
+    b=0
+)
+
+print(linear_fit_result.fit_report())
 # %%
 fig, ax = plt.subplots(figsize=(7, 6))
 
@@ -139,8 +152,11 @@ sns.scatterplot(
     alpha=0.4,
     ax=ax,
 )
-line = torch.linspace(start=min(writer_dla), end=max(writer_dla), steps=20)
-ax.plot(line, -line, color='black')
+plt.plot(writer_dla,
+         linear_fit_result.best_fit,
+         '-',
+         label='Linear fit\nf(x) = m x + b\nm = – 0.72(1)\nb = 0.052(4)',
+         color='black')
 
 ax.set_title(
     f"DLA of predicting next token in prompt\nStarting at pos={start_pos}, n={n_prompts}",
@@ -148,7 +164,9 @@ ax.set_title(
 )
 ax.set_xlabel("DLA of writer output", fontsize=13)
 ax.set_ylabel("DLA of V-composition (writer->cleaner)", fontsize=13)
-
+legend = fig.legend(loc=(0.7,0.72), fontsize=13)
+frame = legend.get_frame()  # Get the default legend frame
+frame.set_facecolor('white')
 fig.tight_layout();
 
 # %%
