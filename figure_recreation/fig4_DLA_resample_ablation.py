@@ -25,8 +25,8 @@ sns.set()
 torch.set_grad_enabled(False)
 device = "cpu"
 
-N_TEXT_PROMPTS = 2
-N_CODE_PROMPTS = 1
+N_TEXT_PROMPTS = 240
+N_CODE_PROMPTS = 60
 FIG_A_FILEPATH = "figs/fig4a_DLA_resample_ablation.jpg"
 FIG_B_FILEPATH = "figs/fig4b_DLA_resample_ablation.jpg"
 
@@ -284,9 +284,9 @@ fig_b.suptitle(f"DLAs of different heads, with/without resample ablation", fonts
 fig_b.tight_layout()
 
 # %%
-# fig_a.savefig(FIG_A_FILEPATH)
-# fig_b.savefig(FIG_B_FILEPATH)
-# print("Figures saved to: ", FIG_A_FILEPATH, FIG_B_FILEPATH)
+fig_a.savefig(FIG_A_FILEPATH)
+fig_b.savefig(FIG_B_FILEPATH)
+print("Figures saved to: ", FIG_A_FILEPATH, FIG_B_FILEPATH)
 
 
 # Code to find which heads have good anti-examples
