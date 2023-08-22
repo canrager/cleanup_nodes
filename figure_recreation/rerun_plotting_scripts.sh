@@ -9,3 +9,6 @@ python fig3_patch_v_input_cleaners.py
 
 echo "Running script for fig4"
 python fig4_DLA_resample_ablation.py
+
+echo "Running script for fig5"
+python fig5_DLA_scatter_plot.py
