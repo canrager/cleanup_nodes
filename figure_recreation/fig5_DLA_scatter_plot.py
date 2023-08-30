@@ -172,7 +172,7 @@ ax.set_title(
 )
 ax.set_xlabel("DLA of writer output", fontsize=13)
 ax.set_ylabel("DLA of V-composition (writer->cleaner)", fontsize=13)
-legend = fig.legend(loc=(0.6, 0.72), fontsize=13)
+legend = fig.legend(loc=(0.65, 0.725), fontsize=13)
 frame = legend.get_frame()  # Get the default legend frame
 frame.set_facecolor('white')
 fig.tight_layout();
@@ -180,3 +180,5 @@ fig.tight_layout();
 # %%
 fig.savefig(FIG_FILEPATH)
 print("Figure saved to: ", FIG_FILEPATH)
+
+# %%
