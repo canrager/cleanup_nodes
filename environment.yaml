@@ -15,6 +15,7 @@ dependencies:
   - ipywidgets
   - jaxtyping
   - jupyter
+  - lmfit
   - nbformat>=4.2.0  # for plotly
   - numpy
   - pandas

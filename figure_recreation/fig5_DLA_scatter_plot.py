@@ -142,6 +142,7 @@ linear_fit_result = linear_model.fit(
     b=0
 )
 
+params = dict(linear_fit_result.params.items())
 print(linear_fit_result.fit_report())
 # %%
 fig, ax = plt.subplots(figsize=(7, 6))
@@ -152,19 +153,26 @@ sns.scatterplot(
     alpha=0.4,
     ax=ax,
 )
-plt.plot(writer_dla,
-         linear_fit_result.best_fit,
-         '-',
-         label='Linear fit\nf(x) = m x + b\nm = – 0.72(1)\nb = 0.052(4)',
-         color='black')
+plt.plot(
+    writer_dla,
+    linear_fit_result.best_fit,
+    '-',
+    label=(
+        f'Linear fit\nf(x) = m x + b'
+        f'\nm = {params["m"].value :.3f} ± {2 * params["m"].stderr :.3f}'
+        f'\nb = {params["b"].value :.3f} ± {2 * params["b"].stderr :.3f}'
+    ),
+    color='black',
+)
 
 ax.set_title(
-    f"DLA of predicting next token in prompt\nStarting at pos={start_pos}, n={n_prompts}",
+    f"DLA of predicting next token in prompt"
+    f"\nStarting at pos={start_pos}, n={n_prompts}",
     fontsize=14,
 )
 ax.set_xlabel("DLA of writer output", fontsize=13)
 ax.set_ylabel("DLA of V-composition (writer->cleaner)", fontsize=13)
-legend = fig.legend(loc=(0.7,0.72), fontsize=13)
+legend = fig.legend(loc=(0.6, 0.72), fontsize=13)
 frame = legend.get_frame()  # Get the default legend frame
 frame.set_facecolor('white')
 fig.tight_layout();
