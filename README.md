@@ -1,5 +1,10 @@
 # Cleanup Nodes
-\<Add short project description here\>
+
+[Blogpost](https://www.lesswrong.com/posts/2PucFqdRyEvaHb4Hn/an-adversarial-example-for-direct-logit-attribution-memory)
+
+We provide concrete evidence for memory management or clean-up in a 4-layer transformer [gelu-4l](http://neelnanda.io/toy-models). Then we examine implications on  Direct Logit Attribution (DLA), a rough method to measure the relevance of attention heads and MLP layers w.r.t. a specific task. We conclude DLA is misleading because it does not account for the clean-up.
+
+James Dao, Yeu-Tong Lau, Can Rager, and Jett Janiak did this work as the final capstone project of ARENA in 2023. Alignment Research Engineering Acellerator (ARENA) is a fellowship covering software engineering, natural language processing, reinforcement learning and distributed computing.
 
 ## Environment Setup
 
