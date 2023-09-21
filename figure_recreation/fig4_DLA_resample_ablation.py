@@ -23,6 +23,9 @@ import seaborn as sns
 # Global settings and variables
 sns.set()
 torch.set_grad_enabled(False)
+SEED = 5235
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
 device = "cpu"
 
 N_TEXT_PROMPTS = 240
