@@ -51,13 +51,13 @@ model.cfg.use_attn_result = True
 model.cfg.use_split_qkv_input = True  # Required to have a head dimension in hook_normalized
 
 # %%
+# Adversarial prompts
 examples = [
     {
-        "text": "It's in the cupboard, either on the top or the",
+        "text": "It's in the cupboard, either on the top or on the",
         "correct": " bottom",
         "incorrect": " top",
-        # "incorrect": "back",
-        # Logit diff = 1.79
+        # Logit diff = 1.07
     },
     {
         "text": "I went to university at Michigan",
@@ -79,8 +79,12 @@ examples = [
     },
 ]
 
+# %%
+torch.manual_seed(42)
+batch_idx_shfl = torch.randperm(rand_prompts.shape[0])
 
 # %%
+# Helper functions for DLA
 def get_head_DLA(model, example, layer, head):
     """Only for final sequence position."""
 
@@ -158,8 +162,8 @@ def get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, cl
 
     return patched_head_out_ln @ logit_diff_direction
 
-
 # %%
+# Compute original logit diffs
 orig_logit_diffs = []
 for example in examples:
     logits = model(example["text"])[0, -1]
@@ -170,18 +174,20 @@ for example in examples:
     orig_logit_diffs.append(logit_diff.item())
 
 
-# %%
+# Get vanilla DLAs and resample ablated DLAs for the writer head
 layer, head = 0, 2
 
 orig_dlas = []
 ra_dlas = []
 for example in examples:
     orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
-    ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+    ra_dla = get_head_DLA_resample_ablation(
+        model, example, layer, head, rand_prompts[batch_idx_shfl], clean_scale,
+    )
     orig_dlas.append(orig_dla)
     ra_dlas.append(ra_dla)
 
-# %%
+# Prep df for plotting
 df = pd.DataFrame()
 df["dla"] = orig_dlas
 df["example"] = [i+1 for i in range(len(orig_dlas))]
@@ -195,50 +201,24 @@ for i, ra_dla in enumerate(ra_dlas):
     df = pd.concat([df, tmp_df])
 
 # %%
-fig_a, ax_a = plt.subplots(2, 2, figsize=(12, 8))
-
-for i in range(len(examples)):
-    r, c = i // 2, i % 2
-    sns.barplot(
-        data=df.query(f"example == {i+1}"),
-        x="type",
-        y="dla",
-        estimator="median",
-        errorbar=("pi", 75),
-        ax=ax_a[r, c],
-    )
-    # Plot aesthetics
-    ax_a[r, c].set_title(
-        f"Prompt {i+1}: {repr(examples[i]['text'])}\n"
-        f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
-        f"Original logit difference: {orig_logit_diffs[i]:.2f}",
-        fontsize=12,
-    )
-    ax_a[r, c].set_xlabel("")
-    if c == 0:
-        ax_a[r, c].set_ylabel("Direct Logit Attribution", fontsize=12)
-    else:
-        ax_a[r, c].set_ylabel("")
-    ax_a[r, c].set_xticklabels(["Original", "Resample Ablation"], fontsize=12)
-
-fig_a.suptitle(f"DLA of L{layer}H{head}, with/without resample ablation", fontsize=16)
-fig_a.tight_layout()
-
-# %%
-attn_heads = [(3, 1), (2, 1), (3, 5), (2, 2),]
+# Get vanilla DLAs and resample ablated DLAs for the heads with meaningful
+# contributions to final logits
+attn_heads = [(3, 1), (2, 1), (3, 5), (2, 2)]
 
 orig_dlas2 = []
 ra_dlas2 = []
 for i in trange(len(examples)):
     example = examples[i]
-    layer, head = attn_heads[i]
+    layer_, head_ = attn_heads[i]
 
-    orig_dla, clean_scale = get_head_DLA(model, example, layer, head)
-    ra_dla = get_head_DLA_resample_ablation(model, example, layer, head, rand_prompts, clean_scale)
+    orig_dla, clean_scale = get_head_DLA(model, example, layer_, head_)
+    ra_dla = get_head_DLA_resample_ablation(
+        model, example, layer_, head_, rand_prompts[batch_idx_shfl], clean_scale,
+    )
     orig_dlas2.append(orig_dla)
     ra_dlas2.append(ra_dla)
 
-# %%
+# Prep df for plotting
 df2 = pd.DataFrame()
 df2["dla"] = orig_dlas2
 df2["example"] = [i+1 for i in range(len(orig_dlas2))]
@@ -251,36 +231,57 @@ for i, ra_dla in enumerate(ra_dlas2):
     tmp_df["type"] = "resample"
     df2 = pd.concat([df2, tmp_df])
 
-# %%
-fig_b, ax_b = plt.subplots(2, 2, figsize=(12, 8))
 
-for i in range(len(examples)):
-    r, c = i // 2, i % 2
+# %%
+fig_a, ax_a = plt.subplots(1, 4, figsize=(10, 4))
+
+for i, ax in enumerate(ax_a):
+    sns.barplot(
+        data=df.query(f"example == {i+1}"),
+        x="type",
+        y="dla",
+        estimator="median",
+        errorbar=("pi", 75),
+        ax=ax,
+    )
+    # Plot aesthetics
+    ax.set_title(f"Prompt {i+1}", fontsize=14)
+    ax.set_xlabel("")
+    if i == 0:
+        ax.set_ylabel("logit difference", fontsize=14)
+    else:
+        ax.set_ylabel("")
+    ax.set_xticklabels(["clean", "patched"], fontsize=14)
+
+fig_a.suptitle(f"DLA of L{layer}H{head}, logit difference of top 2 predictions", fontsize=16)
+fig_a.tight_layout()
+
+# %%
+fig_b, ax_b = plt.subplots(1, 4, figsize=(10, 4))
+
+for i, ax in enumerate(ax_b):
     sns.barplot(
         data=df2.query(f"example == {i+1}"),
         x="type",
         y="dla",
         estimator="median",
         errorbar=("pi", 75),
-        ax=ax_b[r, c],
+        ax=ax,
     )
     # Plot aesthetics
-    ax_b[r, c].axhline(0, color="black", linestyle="--")
-    ax_b[r, c].set_title(
-        f"Head = L{attn_heads[i][0]}H{attn_heads[i][1]}\n"
-        f"Prompt {i+1}: {repr(examples[i]['text'])}\n"
-        f"Correct/incorrect token: {repr(examples[i]['correct'])} / {repr(examples[i]['incorrect'])}\n"
-        f"Original logit difference: {orig_logit_diffs[i]:.2f}",
-        fontsize=12,
+    ax.axhline(0, color="black", linestyle="--")
+    ax.set_title(
+        f"Prompt {i+1}, L{attn_heads[i][0]}H{attn_heads[i][1]}",
+        fontsize=14
     )
-    ax_b[r, c].set_xlabel("")
-    if c == 0:
-        ax_b[r, c].set_ylabel("Direct Logit Attribution", fontsize=12)
+    ax.set_xlabel("")
+    if i == 0:
+        ax.set_ylabel("logit difference", fontsize=14)
     else:
-        ax_b[r, c].set_ylabel("")
-    ax_b[r, c].set_xticklabels(["Original", "Resample Ablation"], fontsize=12)
+        ax.set_ylabel("")
+    ax.set_xticklabels(["clean", "patched"], fontsize=14)
 
-fig_b.suptitle(f"DLAs of different heads, with/without resample ablation", fontsize=16)
+fig_b.suptitle(f"DLA of other heads, logit difference of top 2 predictions", fontsize=16)
 fig_b.tight_layout()
 
 # %%
